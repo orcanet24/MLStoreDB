@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLStoreDB — Manual</title>
+<style>
+:root {
+  --bg: #0f1420;
+  --panel: #171e2e;
+  --panel2: #1d2740;
+  --text: #dbe4f3;
+  --muted: #8b9bb8;
+  --accent: #4f8cff;
+  --accent2: #7ee0a3;
+  --border: #2a3752;
+  --code-bg: #0b0f18;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+header {
+  background: linear-gradient(135deg, #16203a, #101828);
+  border-bottom: 1px solid var(--border);
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header h1 { font-size: 1.35rem; font-weight: 600; }
+header h1 span { color: var(--accent); }
+header .subtitle { color: var(--muted); font-size: 0.85rem; }
+.lang-switch { display: flex; gap: 6px; }
+.lang-switch button {
+  background: var(--panel2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lang-switch button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+nav.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 12px 28px 0 28px;
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+}
+nav.tabs button {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 9px 16px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+nav.tabs button:hover { color: var(--text); background: var(--panel); }
+nav.tabs button.active {
+  background: var(--panel);
+  color: var(--accent);
+  border-color: var(--border);
+  font-weight: 600;
+}
+nav.tabs button .num {
+  display: inline-block;
+  background: var(--panel2);
+  border-radius: 5px;
+  padding: 0 6px;
+  margin-right: 6px;
+  font-size: 0.78rem;
+  color: var(--accent2);
+}
+main { max-width: 980px; margin: 0 auto; padding: 28px 24px 80px 24px; }
+.content { display: none; animation: fadeIn 0.2s ease; }
+.content.visible { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+  color: #fff;
+}
+h3 {
+  font-size: 1.08rem;
+  margin: 26px 0 10px 0;
+  color: var(--accent2);
+}
+p { margin: 10px 0; color: var(--text); }
+ul, ol { margin: 10px 0 10px 24px; }
+li { margin: 4px 0; }
+code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.86em;
+  color: #ffd479;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #c8e1ff;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.9rem; }
+th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+th { background: var(--panel2); color: var(--accent); font-weight: 600; }
+tr:nth-child(even) td { background: var(--panel); }
+blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+  padding: 10px 16px;
+  border-radius: 0 8px 8px 0;
+  margin: 14px 0;
+  color: var(--muted);
+}
+.note { color: var(--accent2); font-weight: 600; }
+footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 20px;
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 640px) {
+  nav.tabs { padding: 8px 10px 0 10px; }
+  main { padding: 18px 12px 60px 12px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>MLStore<span>DB</span> — <span id="hdr-title">Manual</span></h1>
+    <div class="subtitle" id="hdr-sub">BD JSON + Grafos · embebida, cifrada, con wire protocol Mongo</div>
+  </div>
+  <div class="lang-switch">
+    <button id="btn-es" onclick="setLang('es')">🇪🇸 ES</button>
+    <button id="btn-en" onclick="setLang('en')">🇺🇸 EN</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main>
+
+<!-- ============ ES 01 ============ -->
+<section class="content lang-es" data-topic="01">
+<h2>01 · Conexión</h2>
+<h3>Base de datos en memoria</h3>
+<pre><code>store := db.New()          // RAM, sin archivo
+defer store.Close()</code></pre>
+<h3>Base de datos en archivo cifrado</h3>
+<pre><code>store, err := db.OpenWithLock("datos.mlstore", db.Options{
+    MasterKey: []byte("mi-clave-maestra-de-32-bytes!!"), // KEK
+    MachineID: "mi-equipo",                               // opcional
+})
+defer store.Close()</code></pre>
+<ul>
+<li><code>Open</code> abre/crea el archivo sin lock de proceso.</li>
+<li><code>OpenWithLock</code> además toma un lock exclusivo: dos procesos no pueden abrir la misma BD.</li>
+<li>El archivo queda cifrado con AES-256-GCM (nunca hay JSON en claro).</li>
+</ul>
+<h3>Opciones útiles de Options</h3>
+<table>
+<tr><th>Campo</th><th>Qué hace</th></tr>
+<tr><td><code>MasterKey []byte</code></td><td>Clave maestra (KEK). Requerida para archivos.</td></tr>
+<tr><td><code>SyncOnWrite bool</code></td><td>Flush síncrono tras cada mutación (durabilidad).</td></tr>
+<tr><td><code>AutoFlush time.Duration</code></td><td>Período del flush automático (default 2s).</td></tr>
+<tr><td><code>CacheBytes int64</code></td><td>Presupuesto del page cache (0=256MB, &lt;0=ilimitado).</td></tr>
+<tr><td><code>FindWorkers int</code></td><td>Goroutines para Find paralelo (0=GOMAXPROCS).</td></tr>
+<tr><td><code>SessionTTL time.Duration</code></td><td>Vida de las sesiones RBAC (0=24h, &lt;0=nunca).</td></tr>
+</table>
+<h3>Usuarios, roles y sesiones (RBAC)</h3>
+<pre><code>// 1) rol con permisos
+store.CreateRole("editor", []db.Permission{
+    {Collection: "orders", Read: true, Write: true},
+    {Collection: "audit",  Read: true},   // solo lectura
+})
+store.CreateRole("admin", []db.Permission{
+    {Collection: "*", Read: true, Write: true},  // comodín
+})
+// 2) usuario (activa RBAC en el primero)
+store.CreateUser("ana", "secreto", []string{"editor"})
+// 3) autenticar → sesión
+sess, err := store.Authenticate("ana", "secreto")
+docs, _ := sess.Find("orders", db.Document{"status": "PAID"}, nil)</code></pre>
+<blockquote>Sin usuarios la API cruda funciona sin restricciones; con ≥1 usuario la API cruda devuelve <code>ErrUnauthorized</code> y hay que usar la <code>Session</code>.</blockquote>
+<h3>Desde clientes Mongo</h3>
+<pre><code>go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
+    -key "mi-clave-maestra-de-32-bytes!!" -db midb</code></pre>
+<p>Conéctate con <code>mongodb://127.0.0.1:27017</code> (Navicat / Compass / mongosh). Detalle en la pestaña 09.</p>
+</section>
+
+<!-- ============ EN 01 ============ -->
+<section class="content lang-en" data-topic="01">
+<h2>01 · Connection</h2>
+<h3>In-memory database</h3>
+<pre><code>store := db.New()          // RAM, no file
+defer store.Close()</code></pre>
+<h3>Encrypted file database</h3>
+<pre><code>store, err := db.OpenWithLock("data.mlstore", db.Options{
+    MasterKey: []byte("my-32-bytes-long-master-key!!"), // KEK
+    MachineID: "my-machine",                            // optional
+})
+defer store.Close()</code></pre>
+<ul>
+<li><code>Open</code> opens/creates the file without a process lock.</li>
+<li><code>OpenWithLock</code> also takes an exclusive lock: two processes cannot open the same DB.</li>
+<li>The file is AES-256-GCM encrypted (no plaintext JSON ever hits disk).</li>
+</ul>
+<h3>Useful Options fields</h3>
+<table>
+<tr><th>Field</th><th>What it does</th></tr>
+<tr><td><code>MasterKey []byte</code></td><td>Master key (KEK). Required for files.</td></tr>
+<tr><td><code>SyncOnWrite bool</code></td><td>Synchronous flush after every mutation (durability).</td></tr>
+<tr><td><code>AutoFlush time.Duration</code></td><td>Auto-flush ticker period (default 2s).</td></tr>
+<tr><td><code>CacheBytes int64</code></td><td>Page cache budget (0=256MB, &lt;0=unlimited).</td></tr>
+<tr><td><code>FindWorkers int</code></td><td>Goroutines for parallel Find (0=GOMAXPROCS).</td></tr>
+<tr><td><code>SessionTTL time.Duration</code></td><td>RBAC session lifetime (0=24h, &lt;0=never).</td></tr>
+</table>
+<h3>Users, roles and sessions (RBAC)</h3>
+<pre><code>// 1) role with permissions
+store.CreateRole("editor", []db.Permission{
+    {Collection: "orders", Read: true, Write: true},
+    {Collection: "audit",  Read: true},   // read-only
+})
+store.CreateRole("admin", []db.Permission{
+    {Collection: "*", Read: true, Write: true},  // wildcard
+})
+// 2) user (RBAC activates with the first one)
+store.CreateUser("ana", "secret", []string{"editor"})
+// 3) authenticate → session
+sess, err := store.Authenticate("ana", "secret")
+docs, _ := sess.Find("orders", db.Document{"status": "PAID"}, nil)</code></pre>
+<blockquote>With no users the raw API works unrestricted; with ≥1 user the raw API returns <code>ErrUnauthorized</code> and you must use the <code>Session</code>.</blockquote>
+<h3>From Mongo clients</h3>
+<pre><code>go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
+    -key "my-32-bytes-long-master-key!!" -db mydb</code></pre>
+<p>Connect with <code>mongodb://127.0.0.1:27017</code> (Navicat / Compass / mongosh). Details in tab 09.</p>
+</section>
+
+<!-- ============ ES 02 ============ -->
+<section class="content lang-es" data-topic="02">
+<h2>02 · Insertar</h2>
+<h3>Insert básico</h3>
+<pre><code>err := store.Insert("clientes", db.Document{
+    "_id":   "c1",
+    "nombre": "Ana",
+    "ciudad": "Lima",
+})</code></pre>
+<ul>
+<li>La colección se crea sola la primera vez que insertas.</li>
+<li><code>_id</code> <span class="note">debe ser string</span>. Si lo omites, se genera un ULID automático.</li>
+</ul>
+<h3>Documentos anidados y arrays</h3>
+<pre><code>store.Insert("orders", db.Document{
+    "_id": "o100", "total": 250.0, "buyer_id": "c1",
+    "items": []any{
+        db.Document{"sku": "A1", "qty": 2, "precio": 100.0},
+        db.Document{"sku": "B2", "qty": 1, "precio": 50.0},
+    },
+    "shipping": db.Document{
+        "mode": "air",
+        "addr": db.Document{"city": "Lima", "zip": "15001"},
+    },
+})</code></pre>
+<h3>Upsert (crear o reemplazar por _id)</h3>
+<pre><code>store.Upsert("clientes", "c1", db.Document{
+    "_id": "c1", "nombre": "Ana", "nivel": "gold",
+})</code></pre>
+<h3>Índice unique + duplicados</h3>
+<pre><code>store.EnsureIndex("clientes", []string{"email"}, true) // unique
+err := store.Insert("clientes", db.Document{"_id": "c2", "email": "ana@x.com"})
+// err == db.ErrDuplicate si ya existe</code></pre>
+<h3>Desde mongosh / Navicat</h3>
+<pre><code>db.clientes.insertOne({ _id: "c1", nombre: "Ana", ciudad: "Lima" })
+db.orders.insertMany([
+  { _id: "o1", total: 100, buyer_id: "c1" },
+  { _id: "o2", total: 250, buyer_id: "c1" }
+])</code></pre>
+<blockquote>Por el wire, un <code>_id</code> ObjectId o numérico se normaliza a string (hex del ObjectId).</blockquote>
+<h3>Límites</h3>
+<ul>
+<li>Tamaño máximo por documento: <span class="note">1 MB</span> (<code>db.ErrTooLarge</code>).</li>
+<li>Colecciones de sistema (<code>_users</code>, <code>_roles</code>, <code>_triggers</code>) rechazan inserts directos.</li>
+</ul>
+</section>
+
+<!-- ============ EN 02 ============ -->
+<section class="content lang-en" data-topic="02">
+<h2>02 · Insert</h2>
+<h3>Basic insert</h3>
+<pre><code>err := store.Insert("customers", db.Document{
+    "_id":    "c1",
+    "nombre": "Ana",
+    "city":   "Lima",
+})</code></pre>
+<ul>
+<li>The collection is created automatically on first insert.</li>
+<li><code>_id</code> <span class="note">must be a string</span>. If omitted, an automatic ULID is generated.</li>
+</ul>
+<h3>Nested documents and arrays</h3>
+<pre><code>store.Insert("orders", db.Document{
+    "_id": "o100", "total": 250.0, "buyer_id": "c1",
+    "items": []any{
+        db.Document{"sku": "A1", "qty": 2, "price": 100.0},
+        db.Document{"sku": "B2", "qty": 1, "price": 50.0},
+    },
+    "shipping": db.Document{
+        "mode": "air",
+        "addr": db.Document{"city": "Lima", "zip": "15001"},
+    },
+})</code></pre>
+<h3>Upsert (create or replace by _id)</h3>
+<pre><code>store.Upsert("customers", "c1", db.Document{
+    "_id": "c1", "nombre": "Ana", "level": "gold",
+})</code></pre>
+<h3>Unique index + duplicates</h3>
+<pre><code>store.EnsureIndex("customers", []string{"email"}, true) // unique
+err := store.Insert("customers", db.Document{"_id": "c2", "email": "ana@x.com"})
+// err == db.ErrDuplicate when it already exists</code></pre>
+<h3>From mongosh / Navicat</h3>
+<pre><code>db.customers.insertOne({ _id: "c1", nombre: "Ana", city: "Lima" })
+db.orders.insertMany([
+  { _id: "o1", total: 100, buyer_id: "c1" },
+  { _id: "o2", total: 250, buyer_id: "c1" }
+])</code></pre>
+<blockquote>Through the wire, an ObjectId or numeric <code>_id</code> is normalized to a string (ObjectId hex).</blockquote>
+<h3>Limits</h3>
+<ul>
+<li>Max document size: <span class="note">1 MB</span> (<code>db.ErrTooLarge</code>).</li>
+<li>System collections (<code>_users</code>, <code>_roles</code>, <code>_triggers</code>) reject direct inserts.</li>
+</ul>
+</section>
+
+<!-- ============ ES 03 ============ -->
+<section class="content lang-es" data-topic="03">
+<h2>03 · Consultar (SELECT)</h2>
+<h3>Por _id</h3>
+<pre><code>doc, err := store.Get("clientes", "c1")   // ErrNotFound si no existe</code></pre>
+<h3>Find con filtro</h3>
+<pre><code>docs, err := store.Find("orders",
+    db.Document{"status": "PAID"},   // igualdad
+    nil,
+)</code></pre>
+<h3>Operadores de comparación</h3>
+<pre><code>db.Document{"total": db.Document{"$gte": 100}}   // &gt;= 100
+db.Document{"total": db.Document{"$gt": 100}}    // &gt;  100
+db.Document{"total": db.Document{"$lt": 500}}    // &lt;  500
+db.Document{"total": db.Document{"$lte": 500}}   // &lt;= 500
+db.Document{"total": db.Document{"$ne": 0}}      // != 0 (missing → true)
+db.Document{"st": db.Document{"$in": []any{"A", "C"}}}
+db.Document{"st": db.Document{"$nin": []any{"X"}}}</code></pre>
+<h3>Regex, existencia y lógicos</h3>
+<pre><code>db.Document{"tag": db.Document{"$regex": "^a", "$options": "i"}} // i=insensible
+db.Document{"campo": db.Document{"$exists": true}}
+db.Document{"campo": nil}                    // null o ausente
+
+db.Document{"$and": []any{
+    db.Document{"status": "PAID"},
+    db.Document{"total": db.Document{"$gte": 100}},
+}}
+db.Document{"$or":  []any{ ... }}
+db.Document{"$nor": []any{ ... }}
+db.Document{"$not": db.Document{"status": "PAID"}}</code></pre>
+<h3>Campos anidados (paths punteados)</h3>
+<pre><code>db.Document{"shipping.mode": "air"}
+db.Document{"payload.shipping.mode": db.Document{"$ne": "sea"}}</code></pre>
+<h3>Sort, Limit, Skip, Projection</h3>
+<pre><code>docs, err := store.Find("orders",
+    db.Document{"total": db.Document{"$gte": 100}},
+    &amp;db.FindOptions{
+        Sort:       map[string]int{"total": -1},  // 1 asc, -1 desc
+        Limit:      10,
+        Skip:       20,                           // paginación
+        Projection: []string{"total", "buyer_id"}, // _id siempre incluido
+    },
+)</code></pre>
+<h3>Count e índices</h3>
+<pre><code>n, _ := store.Count("orders", db.Document{"status": "PAID"})
+
+store.EnsureIndex("orders", []string{"status"}, false)         // simple
+store.EnsureIndex("orders", []string{"buyer_id", "status"}, false) // compuesto
+store.EnsureIndex("orders", []string{"order_id"}, true)        // unique</code></pre>
+<p>Los filtros de igualdad/<code>$in</code>/rango usan el índice automáticamente si cubre el campo.</p>
+<h3>Desde mongosh / Navicat</h3>
+<pre><code>db.orders.find({ total: { $gte: 100 } }).sort({ total: -1 }).limit(10).skip(20)
+db.orders.find({ status: "PAID" }, { total: 1, buyer_id: 1 })
+db.orders.countDocuments({ status: "PAID" })
+db.orders.findOne({ _id: "o100" })</code></pre>
+<blockquote>Soportados: <code>$eq $ne $gt $gte $lt $lte $in $nin $regex $options $exists $and $or $not $nor</code>. No soportados: <code>$elemMatch $size $type $mod $all $where $expr</code>.</blockquote>
+</section>
+
+<!-- ============ EN 03 ============ -->
+<section class="content lang-en" data-topic="03">
+<h2>03 · Select</h2>
+<h3>By _id</h3>
+<pre><code>doc, err := store.Get("customers", "c1")   // ErrNotFound when missing</code></pre>
+<h3>Find with a filter</h3>
+<pre><code>docs, err := store.Find("orders",
+    db.Document{"status": "PAID"},   // equality
+    nil,
+)</code></pre>
+<h3>Comparison operators</h3>
+<pre><code>db.Document{"total": db.Document{"$gte": 100}}   // &gt;= 100
+db.Document{"total": db.Document{"$gt": 100}}    // &gt;  100
+db.Document{"total": db.Document{"$lt": 500}}    // &lt;  500
+db.Document{"total": db.Document{"$lte": 500}}   // &lt;= 500
+db.Document{"total": db.Document{"$ne": 0}}      // != 0 (missing → true)
+db.Document{"st": db.Document{"$in": []any{"A", "C"}}}
+db.Document{"st": db.Document{"$nin": []any{"X"}}}</code></pre>
+<h3>Regex, existence and logical</h3>
+<pre><code>db.Document{"tag": db.Document{"$regex": "^a", "$options": "i"}} // case-insensitive
+db.Document{"field": db.Document{"$exists": true}}
+db.Document{"field": nil}                    // null or missing
+
+db.Document{"$and": []any{
+    db.Document{"status": "PAID"},
+    db.Document{"total": db.Document{"$gte": 100}},
+}}
+db.Document{"$or":  []any{ ... }}
+db.Document{"$nor": []any{ ... }}
+db.Document{"$not": db.Document{"status": "PAID"}}</code></pre>
+<h3>Nested fields (dotted paths)</h3>
+<pre><code>db.Document{"shipping.mode": "air"}
+db.Document{"payload.shipping.mode": db.Document{"$ne": "sea"}}</code></pre>
+<h3>Sort, Limit, Skip, Projection</h3>
+<pre><code>docs, err := store.Find("orders",
+    db.Document{"total": db.Document{"$gte": 100}},
+    &amp;db.FindOptions{
+        Sort:       map[string]int{"total": -1},  // 1 asc, -1 desc
+        Limit:      10,
+        Skip:       20,                           // pagination
+        Projection: []string{"total", "buyer_id"}, // _id always included
+    },
+)</code></pre>
+<h3>Count and indexes</h3>
+<pre><code>n, _ := store.Count("orders", db.Document{"status": "PAID"})
+
+store.EnsureIndex("orders", []string{"status"}, false)         // simple
+store.EnsureIndex("orders", []string{"buyer_id", "status"}, false) // compound
+store.EnsureIndex("orders", []string{"order_id"}, true)        // unique</code></pre>
+<p>Equality/<code>$in</code>/range filters automatically use an index when one covers the field.</p>
+<h3>From mongosh / Navicat</h3>
+<pre><code>db.orders.find({ total: { $gte: 100 } }).sort({ total: -1 }).limit(10).skip(20)
+db.orders.find({ status: "PAID" }, { total: 1, buyer_id: 1 })
+db.orders.countDocuments({ status: "PAID" })
+db.orders.findOne({ _id: "o100" })</code></pre>
+<blockquote>Supported: <code>$eq $ne $gt $gte $lt $lte $in $nin $regex $options $exists $and $or $not $nor</code>. Not supported: <code>$elemMatch $size $type $mod $all $where $expr</code>.</blockquote>
+</section>
+
+<!-- ============ ES 04 ============ -->
+<section class="content lang-es" data-topic="04">
+<h2>04 · Actualizar (UPDATE)</h2>
+<h3>Update con patch (merge shallow)</h3>
+<pre><code>err := store.Update("clientes", "c1", db.Document{
+    "nivel": "gold",   // se añade/actualiza; el resto queda intacto
+})</code></pre>
+<p><span class="note">Copy-on-write</span>: si la validación falla (tamaño, índice unique), el documento vivo no queda a medias.</p>
+<h3>UpdateFields: patch + borrar campos</h3>
+<pre><code>err := store.UpdateFields("clientes", "c1",
+    db.Document{"nivel": "gold"}, // set
+    []string{"temp", "cache"},    // unset (borrar)
+)</code></pre>
+<h3>Actualizar campos anidados</h3>
+<pre><code>doc, _ := store.Get("orders", "o100")
+ship := doc["shipping"].(db.Document)
+ship["mode"] = "sea"
+store.Update("orders", "o100", db.Document{"shipping": ship})</code></pre>
+<h3>Desde mongosh / Navicat (operadores del wire)</h3>
+<pre><code>db.clientes.updateOne(
+  { _id: "c1" },
+  { $set: { nivel: "gold", "perfil.vip": true } }   // paths punteados OK
+)
+db.clientes.updateOne({ _id: "c1" }, { $unset: { temp: "" } })
+db.orders.updateMany({ status: "PAID" }, { $inc: { intentos: 1 } })
+db.orders.updateOne({ _id: "o100" }, { $push: { items: { sku: "C3", qty: 1 } } })
+db.orders.updateOne({ _id: "o100" }, { $pull: { items: { sku: "B2" } } })
+
+// reemplazo completo (conserva _id)
+db.clientes.replaceOne({ _id: "c1" }, { nombre: "Ana", nivel: "gold" })
+
+// upsert: inserta si no hay match
+db.counters.updateOne({ coll: "orders" }, { $inc: { n: 1 } }, { upsert: true })
+
+// devuelve el documento modificado
+db.orders.findAndModify({
+  query: { _id: "o100" },
+  update: { $set: { locked: true } },
+  new: true
+})</code></pre>
+<blockquote>Operadores del wire: <code>$set $unset $inc $mul $min $max $rename $push $addToSet $pop $pull $pullAll $currentDate $setOnInsert</code> + reemplazo. Pipelines de update: no soportados.</blockquote>
+</section>
+
+<!-- ============ EN 04 ============ -->
+<section class="content lang-en" data-topic="04">
+<h2>04 · Update</h2>
+<h3>Update with a patch (shallow merge)</h3>
+<pre><code>err := store.Update("customers", "c1", db.Document{
+    "level": "gold",   // added/updated; the rest stays intact
+})</code></pre>
+<p><span class="note">Copy-on-write</span>: if validation fails (size, unique index), the live document is never left half-patched.</p>
+<h3>UpdateFields: patch + remove fields</h3>
+<pre><code>err := store.UpdateFields("customers", "c1",
+    db.Document{"level": "gold"}, // set
+    []string{"temp", "cache"},    // unset (remove)
+)</code></pre>
+<h3>Updating nested fields</h3>
+<pre><code>doc, _ := store.Get("orders", "o100")
+ship := doc["shipping"].(db.Document)
+ship["mode"] = "sea"
+store.Update("orders", "o100", db.Document{"shipping": ship})</code></pre>
+<h3>From mongosh / Navicat (wire operators)</h3>
+<pre><code>db.customers.updateOne(
+  { _id: "c1" },
+  { $set: { level: "gold", "profile.vip": true } }   // dotted paths OK
+)
+db.customers.updateOne({ _id: "c1" }, { $unset: { temp: "" } })
+db.orders.updateMany({ status: "PAID" }, { $inc: { attempts: 1 } })
+db.orders.updateOne({ _id: "o100" }, { $push: { items: { sku: "C3", qty: 1 } } })
+db.orders.updateOne({ _id: "o100" }, { $pull: { items: { sku: "B2" } } })
+
+// full replacement (keeps _id)
+db.customers.replaceOne({ _id: "c1" }, { nombre: "Ana", level: "gold" })
+
+// upsert: insert when no match
+db.counters.updateOne({ coll: "orders" }, { $inc: { n: 1 } }, { upsert: true })
+
+// returns the modified document
+db.orders.findAndModify({
+  query: { _id: "o100" },
+  update: { $set: { locked: true } },
+  new: true
+})</code></pre>
+<blockquote>Wire operators: <code>$set $unset $inc $mul $min $max $rename $push $addToSet $pop $pull $pullAll $currentDate $setOnInsert</code> + replacement. Update pipelines: not supported.</blockquote>
+</section>
+
+<!-- ============ ES 05 ============ -->
+<section class="content lang-es" data-topic="05">
+<h2>05 · Eliminar (DELETE)</h2>
+<h3>Por _id</h3>
+<pre><code>err := store.Delete("clientes", "c1")   // ErrNotFound si no existe</code></pre>
+<h3>Por filtro (find + delete)</h3>
+<pre><code>docs, _ := store.Find("orders", db.Document{"status": "CANCELLED"}, nil)
+for _, d := range docs {
+    _ = store.Delete("orders", d["_id"].(string))
+}</code></pre>
+<h3>Eliminar campo (no el documento)</h3>
+<pre><code>store.UpdateFields("orders", "o100", nil, []string{"temp"})</code></pre>
+<h3>Eliminar colección completa</h3>
+<pre><code>store.DropCollection("orders")   // borra docs + índices</code></pre>
+<p>Cada documento pasa por el path de delete normal (registros DEL, hooks, caché) y el scan del archivo está protegido para que la colección no resucite al reabrir.</p>
+<h3>Desde mongosh / Navicat</h3>
+<pre><code>db.clientes.deleteOne({ _id: "c1" })
+db.orders.deleteMany({ status: "CANCELLED" })   // todos los matches
+db.orders.drop()</code></pre>
+<blockquote>Los hooks <code>before_delete</code> / <code>after_delete</code> (y triggers sobre ellos) se disparan en cada borrado, igual que desde Go.</blockquote>
+</section>
+
+<!-- ============ EN 05 ============ -->
+<section class="content lang-en" data-topic="05">
+<h2>05 · Delete</h2>
+<h3>By _id</h3>
+<pre><code>err := store.Delete("customers", "c1")   // ErrNotFound when missing</code></pre>
+<h3>By filter (find + delete)</h3>
+<pre><code>docs, _ := store.Find("orders", db.Document{"status": "CANCELLED"}, nil)
+for _, d := range docs {
+    _ = store.Delete("orders", d["_id"].(string))
+}</code></pre>
+<h3>Delete a field (not the document)</h3>
+<pre><code>store.UpdateFields("orders", "o100", nil, []string{"temp"})</code></pre>
+<h3>Drop an entire collection</h3>
+<pre><code>store.DropCollection("orders")   // removes docs + indexes</code></pre>
+<p>Every document goes through the normal delete path (DEL records, hooks, cache) and the file scan is protected so the collection cannot resurrect on reopen.</p>
+<h3>From mongosh / Navicat</h3>
+<pre><code>db.customers.deleteOne({ _id: "c1" })
+db.orders.deleteMany({ status: "CANCELLED" })   // all matches
+db.orders.drop()</code></pre>
+<blockquote><code>before_delete</code> / <code>after_delete</code> hooks (and triggers on them) fire on every delete, exactly like from Go.</blockquote>
+</section>
+
+<!-- ============ ES 06 ============ -->
+<section class="content lang-es" data-topic="06">
+<h2>06 · Joins: combinar colecciones y armar JSON anidado</h2>
+<p>No hay <code>JOIN</code> de SQL, pero hay <span class="note">cuatro patrones</span> para relacionar colecciones.</p>
+<pre><code>// datos de ejemplo
+store.Insert("customers", db.Document{"_id": "c1", "nombre": "Ana", "city": "Lima"})
+store.Insert("customers", db.Document{"_id": "c2", "nombre": "Bo",  "city": "Bogotá"})
+store.Insert("orders", db.Document{"_id": "o1", "total": 100, "buyer_id": "c1"})
+store.Insert("orders", db.Document{"_id": "o2", "total": 250, "buyer_id": "c1"})
+store.Insert("orders", db.Document{"_id": "o3", "total":  80, "buyer_id": "c2"})</code></pre>
+<h3>Patrón A — Embeber un documento (1 a 1)</h3>
+<pre><code>order, _ := store.Get("orders", "o1")
+cust, _  := store.Get("customers", order["buyer_id"].(string))
+order["customer"] = cust   // ← JSON anidado
+
+// order = { _id: "o1", total: 100, buyer_id: "c1",
+//           customer: { _id: "c1", "nombre": "Ana", city: "Lima" } }</code></pre>
+<h3>Patrón B — Batch con $in (N documentos, 2 queries)</h3>
+<p>El patrón clásico para listados: 1 find de orders + 1 find de customers, sin N+1:</p>
+<pre><code>orders, _ := store.Find("orders", nil, nil)
+
+idSet := map[string]bool{}          // 1) ids únicos de buyers
+var ids []any
+for _, o := range orders {
+    id := o["buyer_id"].(string)
+    if !idSet[id] { idSet[id] = true; ids = append(ids, id) }
+}
+customers, _ := store.Find("customers",   // 2) todos de golpe
+    db.Document{"_id": db.Document{"$in": ids}}, nil)
+byID := map[string]db.Document{}
+for _, c := range customers { byID[c["_id"].(string)] = c }
+
+for _, o := range orders {             // 3) anidar
+    o["customer"] = byID[o["buyer_id"].(string)]
+}</code></pre>
+<h3>Patrón C — $lookup con aggregate (wire / mongosh / Compass)</h3>
+<pre><code>db.orders.aggregate([
+  { $match: { total: { $gte: 100 } } },
+  { $lookup: {
+      from:         "customers",
+      localField:   "buyer_id",
+      foreignField: "_id",
+      as:           "customer"
+  }},
+  { $unwind: "$customer" },
+  { $sort: { total: -1 } }
+])</code></pre>
+<p>Resultado: un doc por order con el customer anidado:</p>
+<pre><code>{ "_id": "o2", "total": 250, "buyer_id": "c1",
+  "customer": { "_id": "c1", "nombre": "Ana", "city": "Lima" } }</code></pre>
+<h3>Patrón D — Relación como grafo (edges)</h3>
+<pre><code>store.AddEdge("compro", "c1", "o1", db.Document{"canal": "web"})
+store.AddEdge("compro", "c1", "o2", db.Document{"canal": "app"})
+
+orderIDs, _ := store.Neighbors("compro", "c1", db.Outgoing) // orders de Ana
+
+// las aristas son documentos consultables:
+store.Find("edges.compro", db.Document{"canal": "web"}, nil)</code></pre>
+<h3>¿Qué patrón usar?</h3>
+<table>
+<tr><th>Necesitas</th><th>Patrón</th></tr>
+<tr><td>Un doc + su padre (detalle)</td><td><b>A</b> (Get + Get)</td></tr>
+<tr><td>Listado con padre embebido</td><td><b>B</b> ($in batch)</td></tr>
+<tr><td>Consulta desde el cliente GUI</td><td><b>C</b> ($lookup aggregate)</td></tr>
+<tr><td>Relación con propiedades / recorridos</td><td><b>D</b> (edges/grafo)</td></tr>
+</table>
+</section>
+
+<!-- ============ EN 06 ============ -->
+<section class="content lang-en" data-topic="06">
+<h2>06 · Joins: combining collections into nested JSON</h2>
+<p>There is no SQL <code>JOIN</code>, but there are <span class="note">four patterns</span> to relate collections.</p>
+<pre><code>// sample data
+store.Insert("customers", db.Document{"_id": "c1", "nombre": "Ana", "city": "Lima"})
+store.Insert("customers", db.Document{"_id": "c2", "nombre": "Bo",  "city": "Bogotá"})
+store.Insert("orders", db.Document{"_id": "o1", "total": 100, "buyer_id": "c1"})
+store.Insert("orders", db.Document{"_id": "o2", "total": 250, "buyer_id": "c1"})
+store.Insert("orders", db.Document{"_id": "o3", "total":  80, "buyer_id": "c2"})</code></pre>
+<h3>Pattern A — Embed one document (1-to-1)</h3>
+<pre><code>order, _ := store.Get("orders", "o1")
+cust, _  := store.Get("customers", order["buyer_id"].(string))
+order["customer"] = cust   // ← nested JSON
+
+// order = { _id: "o1", total: 100, buyer_id: "c1",
+//           customer: { _id": "c1", "nombre": "Ana", city: "Lima" } }</code></pre>
+<h3>Pattern B — Batch with $in (N documents, 2 queries)</h3>
+<p>The classic pattern for listings: 1 find on orders + 1 find on customers, no N+1:</p>
+<pre><code>orders, _ := store.Find("orders", nil, nil)
+
+idSet := map[string]bool{}          // 1) unique buyer ids
+var ids []any
+for _, o := range orders {
+    id := o["buyer_id"].(string)
+    if !idSet[id] { idSet[id] = true; ids = append(ids, id) }
+}
+customers, _ := store.Find("customers",   // 2) all at once
+    db.Document{"_id": db.Document{"$in": ids}}, nil)
+byID := map[string]db.Document{}
+for _, c := range customers { byID[c["_id"].(string)] = c }
+
+for _, o := range orders {             // 3) nest
+    o["customer"] = byID[o["buyer_id"].(string)]
+}</code></pre>
+<h3>Pattern C — $lookup with aggregate (wire / mongosh / Compass)</h3>
+<pre><code>db.orders.aggregate([
+  { $match: { total: { $gte: 100 } } },
+  { $lookup: {
+      from:         "customers",
+      localField:   "buyer_id",
+      foreignField: "_id",
+      as:           "customer"
+  }},
+  { $unwind: "$customer" },
+  { $sort: { total: -1 } }
+])</code></pre>
+<p>Result: one doc per order with the customer nested:</p>
+<pre><code>{ "_id": "o2", "total": 250, "buyer_id": "c1",
+  "customer": { "_id": "c1", "nombre": "Ana", "city": "Lima" } }</code></pre>
+<h3>Pattern D — Relationship as a graph (edges)</h3>
+<pre><code>store.AddEdge("bought", "c1", "o1", db.Document{"channel": "web"})
+store.AddEdge("bought", "c1", "o2", db.Document{"channel": "app"})
+
+orderIDs, _ := store.Neighbors("bought", "c1", db.Outgoing) // Ana's orders
+
+// edges are queryable documents:
+store.Find("edges.bought", db.Document{"channel": "web"}, nil)</code></pre>
+<h3>Which pattern?</h3>
+<table>
+<tr><th>You need</th><th>Pattern</th></tr>
+<tr><td>One doc + its parent (detail view)</td><td><b>A</b> (Get + Get)</td></tr>
+<tr><td>Listing with parent embedded</td><td><b>B</b> ($in batch)</td></tr>
+<tr><td>Query from a GUI client</td><td><b>C</b> ($lookup aggregate)</td></tr>
+<tr><td>Relationship with properties / traversals</td><td><b>D</b> (edges/graph)</td></tr>
+</table>
+</section>
+
+<!-- ============ ES 07 ============ -->
+<section class="content lang-es" data-topic="07">
+<h2>07 · Triggers y Hooks</h2>
+<p>Dos mecanismos: <b>hooks Go</b> (código en tu proceso) y <b>triggers JSON</b> (reglas persistidas en la BD).</p>
+<p>Eventos: <code>before_insert · after_insert · before_update · after_update · before_delete · after_delete · before_upsert · after_upsert</code></p>
+<h3>Veto con before_* (la mutación no ocurre)</h3>
+<pre><code>store.On("before_insert", "orders", func(h *db.HookContext) error {
+    if total, _ := h.Doc["total"].(float64); total &lt; 0 {
+        return errors.New("total no puede ser negativo") // = veto
+    }
+    return nil
+})</code></pre>
+<h3>Mutar el documento antes de insertar</h3>
+<pre><code>store.On("before_insert", "orders", func(h *db.HookContext) error {
+    h.Doc["creado_en"] = time.Now().Format(time.RFC3339)
+    return nil
+})</code></pre>
+<h3>Auditoría después de insertar</h3>
+<pre><code>store.On("after_insert", "orders", func(h *db.HookContext) error {
+    return h.Insert("audit", db.Document{"ref": h.ID, "ev": h.Event})
+})</code></pre>
+<h3>Asíncrono (cola FIFO, no bloquea)</h3>
+<pre><code>store.OnAsync("after_insert", "orders", func(h *db.HookContext) error {
+    return h.Update("counters", "orders", db.Document{"last": h.ID})
+})
+store.WaitAsyncHooks()   // barrera para tests/ops</code></pre>
+<h3>HookContext</h3>
+<table>
+<tr><th>Campo</th><th>Contenido</th></tr>
+<tr><td><code>h.Event</code></td><td>"after_insert", …</td></tr>
+<tr><td><code>h.Collection</code></td><td>colección afectada</td></tr>
+<tr><td><code>h.ID</code></td><td>_id del documento</td></tr>
+<tr><td><code>h.Doc</code></td><td>doc nuevo / patch (preview merged en before_update)</td></tr>
+<tr><td><code>h.Old</code></td><td>doc previo (update/delete); nil en insert</td></tr>
+</table>
+<p>Métodos: <code>h.Get / h.Find / h.Count / h.Insert / h.Upsert / h.Update / h.Delete</code> — las mutaciones anidadas <b>deben</b> ir por <code>h.*</code> (frame de profundidad/ciclos).</p>
+<h3>Triggers JSON — CreateTrigger</h3>
+<pre><code>store.CreateTrigger(db.Trigger{
+    ID:         "audit_paid",
+    Event:      "after_insert",
+    Collection: "orders",
+    Filter:     map[string]any{"status": "PAID"},  // solo si matchea
+    Actions: []db.TriggerAction{
+        {Type: "insert", Collection: "audit",
+         Doc: map[string]any{
+             "ref":  map[string]any{"$get": "_id"},   // template
+             "note": "orden pagada",
+         }},
+    },
+})</code></pre>
+<table>
+<tr><th>Type</th><th>Qué hace</th><th>Campos</th></tr>
+<tr><td><code>set</code></td><td>merge de campos en el doc</td><td>Fields</td></tr>
+<tr><td><code>unset</code></td><td>borra campos (solo before_*)</td><td>Names</td></tr>
+<tr><td><code>insert</code></td><td>inserta doc en otra colección</td><td>Collection, Doc</td></tr>
+<tr><td><code>update</code></td><td>patchea un doc existente</td><td>Collection, ID, Set</td></tr>
+<tr><td><code>upsert</code></td><td>crea o reemplaza</td><td>Collection, ID, Set</td></tr>
+<tr><td><code>delete</code></td><td>borra un doc</td><td>Collection, ID</td></tr>
+</table>
+<h3>Templates y más ejemplos</h3>
+<pre><code>// {"$get": "_id"}       → del doc del evento
+// {"$get": "old.total"} → del doc previo
+
+// marcar antes de guardar
+store.CreateTrigger(db.Trigger{
+    Event: "before_insert", Collection: "orders",
+    Actions: []db.TriggerAction{
+        {Type: "set", Fields: map[string]any{"stamped": true}},
+    },
+})
+// contador con upsert
+store.CreateTrigger(db.Trigger{
+    ID: "cnt_orders", Event: "after_insert", Collection: "orders",
+    Actions: []db.TriggerAction{
+        {Type: "upsert", Collection: "counters", ID: "orders",
+         Set: map[string]any{"last": map[string]any{"$get": "_id"}}},
+    },
+})
+
+store.ListTriggers()
+store.DeleteTrigger("cnt_orders")</code></pre>
+<blockquote>Protecciones: profundidad máx 8 (<code>ErrHookDepth</code>), ciclos (<code>ErrHookCycle</code>), cola async acotada (1024). Los triggers se re-registran solos al reabrir la BD.</blockquote>
+</section>
+
+<!-- ============ EN 07 ============ -->
+<section class="content lang-en" data-topic="07">
+<h2>07 · Triggers and Hooks</h2>
+<p>Two mechanisms: <b>Go hooks</b> (code in your process) and <b>JSON triggers</b> (rules persisted in the DB).</p>
+<p>Events: <code>before_insert · after_insert · before_update · after_update · before_delete · after_delete · before_upsert · after_upsert</code></p>
+<h3>Veto with before_* (the mutation never happens)</h3>
+<pre><code>store.On("before_insert", "orders", func(h *db.HookContext) error {
+    if total, _ := h.Doc["total"].(float64); total &lt; 0 {
+        return errors.New("total cannot be negative") // = veto
+    }
+    return nil
+})</code></pre>
+<h3>Mutate the document before insert</h3>
+<pre><code>store.On("before_insert", "orders", func(h *db.HookContext) error {
+    h.Doc["created_at"] = time.Now().Format(time.RFC3339)
+    return nil
+})</code></pre>
+<h3>Audit after insert</h3>
+<pre><code>store.On("after_insert", "orders", func(h *db.HookContext) error {
+    return h.Insert("audit", db.Document{"ref": h.ID, "ev": h.Event})
+})</code></pre>
+<h3>Asynchronous (FIFO queue, non-blocking)</h3>
+<pre><code>store.OnAsync("after_insert", "orders", func(h *db.HookContext) error {
+    return h.Update("counters", "orders", db.Document{"last": h.ID})
+})
+store.WaitAsyncHooks()   // barrier for tests/ops</code></pre>
+<h3>HookContext</h3>
+<table>
+<tr><th>Field</th><th>Contents</th></tr>
+<tr><td><code>h.Event</code></td><td>"after_insert", …</td></tr>
+<tr><td><code>h.Collection</code></td><td>affected collection</td></tr>
+<tr><td><code>h.ID</code></td><td>document _id</td></tr>
+<tr><td><code>h.Doc</code></td><td>new doc / patch (merged preview on before_update)</td></tr>
+<tr><td><code>h.Old</code></td><td>previous doc (update/delete); nil on insert</td></tr>
+</table>
+<p>Methods: <code>h.Get / h.Find / h.Count / h.Insert / h.Upsert / h.Update / h.Delete</code> — nested mutations <b>must</b> go through <code>h.*</code> (depth/cycle frame).</p>
+<h3>JSON triggers — CreateTrigger</h3>
+<pre><code>store.CreateTrigger(db.Trigger{
+    ID:         "audit_paid",
+    Event:      "after_insert",
+    Collection: "orders",
+    Filter:     map[string]any{"status": "PAID"},  // only when it matches
+    Actions: []db.TriggerAction{
+        {Type: "insert", Collection: "audit",
+         Doc: map[string]any{
+             "ref":  map[string]any{"$get": "_id"},   // template
+             "note": "paid order",
+         }},
+    },
+})</code></pre>
+<table>
+<tr><th>Type</th><th>What it does</th><th>Fields</th></tr>
+<tr><td><code>set</code></td><td>merge fields into the doc</td><td>Fields</td></tr>
+<tr><td><code>unset</code></td><td>remove fields (before_* only)</td><td>Names</td></tr>
+<tr><td><code>insert</code></td><td>insert a doc into another collection</td><td>Collection, Doc</td></tr>
+<tr><td><code>update</code></td><td>patch an existing doc</td><td>Collection, ID, Set</td></tr>
+<tr><td><code>upsert</code></td><td>create or replace</td><td>Collection, ID, Set</td></tr>
+<tr><td><code>delete</code></td><td>delete a doc</td><td>Collection, ID</td></tr>
+</table>
+<h3>Templates and more examples</h3>
+<pre><code>// {"$get": "_id"}       → from the event doc
+// {"$get": "old.total"} → from the previous doc
+
+// stamp before saving
+store.CreateTrigger(db.Trigger{
+    Event: "before_insert", Collection: "orders",
+    Actions: []db.TriggerAction{
+        {Type: "set", Fields: map[string]any{"stamped": true}},
+    },
+})
+// counter with upsert
+store.CreateTrigger(db.Trigger{
+    ID: "cnt_orders", Event: "after_insert", Collection: "orders",
+    Actions: []db.TriggerAction{
+        {Type: "upsert", Collection: "counters", ID: "orders",
+         Set: map[string]any{"last": map[string]any{"$get": "_id"}}},
+    },
+})
+
+store.ListTriggers()
+store.DeleteTrigger("cnt_orders")</code></pre>
+<blockquote>Protections: max depth 8 (<code>ErrHookDepth</code>), cycles (<code>ErrHookCycle</code>), bounded async queue (1024). Triggers re-register themselves when the DB reopens.</blockquote>
+</section>
+
+<!-- ============ ES 08 ============ -->
+<section class="content lang-es" data-topic="08">
+<h2>08 · Grafos</h2>
+<h3>Crear y borrar aristas</h3>
+<pre><code>// AddEdge(tipo, desde, hasta, props) → _id de la arista (ULID)
+id, _ := store.AddEdge("knows", "ana", "bob", db.Document{"desde": 2024})
+store.AddEdge("knows", "bob", "carla", nil)
+store.AddEdge("knows", "ana", "carla", db.Document{"desde": 2020})
+
+store.RemoveEdge("knows", id)   // por _id de arista</code></pre>
+<p>Cada arista es un documento en la colección <code>edges.&lt;tipo&gt;</code>, consultable con Find normal:</p>
+<pre><code>store.Find("edges.knows", db.Document{"desde": db.Document{"$gte": 2020}}, nil)</code></pre>
+<h3>Vecinos</h3>
+<pre><code>amigos, _ := store.Neighbors("knows", "ana", db.Outgoing) // ["bob", "carla"]
+_, _     = store.Neighbors("knows", "bob",  db.Incoming)  // ["ana"]
+todos, _ := store.Neighbors("knows", "ana", db.Both)      // unión dedupe</code></pre>
+<h3>Recorrido BFS — Traverse</h3>
+<pre><code>nodes, _ := store.Traverse(db.TraverseOptions{
+    EdgeType:  "knows",
+    Start:     "ana",
+    Direction: db.Outgoing,  // default
+    MaxDepth:  2,            // default 5, máx 32
+    MinDepth:  1,            // excluir el inicio (depth 0)
+    Limit:     100,          // default 10000, máx 100000
+})
+for _, n := range nodes {
+    fmt.Println(n.Vertex, "a", n.Depth, "saltos")
+}</code></pre>
+<h3>Ruta más corta — ShortestPath</h3>
+<pre><code>path, _ := store.ShortestPath("knows", "ana", "carla", 4)
+// ["ana", "carla"]  (arista directa)
+
+path, _ = store.ShortestPath("knows", "carla", "bob", 4)
+// ["carla", "ana", "bob"]  (2 saltos) · nil si no hay ruta</code></pre>
+<h3>Grafo + RBAC</h3>
+<pre><code>sess, _ := store.Authenticate("ana", "secreto")
+sess.AddEdge("knows", "ana", "dave", nil)
+sess.Neighbors("knows", "ana", db.Outgoing)
+sess.Traverse(db.TraverseOptions{EdgeType: "knows", Start: "ana"})
+sess.ShortestPath("knows", "ana", "dave", 3)</code></pre>
+<h3>Ejemplo: red de recomendación</h3>
+<pre><code>// amigos de amigos (depth exactamente 2)
+nodes, _ := store.Traverse(db.TraverseOptions{
+    EdgeType: "knows", Start: "ana", MinDepth: 2, MaxDepth: 2,
+})
+for _, n := range nodes {
+    if path, _ := store.ShortestPath("knows", "ana", n.Vertex, 3); path != nil {
+        fmt.Printf("sugerencia %s ← %v\n", n.Vertex, path)
+    }
+}</code></pre>
+<blockquote>Múltiples aristas entre el mismo par se deduplican; la caché CSR se invalida sola ante cualquier mutación de <code>edges.*</code>; tipos distintos son grafos independientes.</blockquote>
+</section>
+
+<!-- ============ EN 08 ============ -->
+<section class="content lang-en" data-topic="08">
+<h2>08 · Graphs</h2>
+<h3>Creating and removing edges</h3>
+<pre><code>// AddEdge(type, from, to, props) → edge _id (ULID)
+id, _ := store.AddEdge("knows", "ana", "bob", db.Document{"since": 2024})
+store.AddEdge("knows", "bob", "carla", nil)
+store.AddEdge("knows", "ana", "carla", db.Document{"since": 2020})
+
+store.RemoveEdge("knows", id)   // by edge _id</code></pre>
+<p>Each edge is a document in the <code>edges.&lt;type&gt;</code> collection, queryable with plain Find:</p>
+<pre><code>store.Find("edges.knows", db.Document{"since": db.Document{"$gte": 2020}}, nil)</code></pre>
+<h3>Neighbors</h3>
+<pre><code>friends, _ := store.Neighbors("knows", "ana", db.Outgoing) // ["bob", "carla"]
+_, _      = store.Neighbors("knows", "bob",  db.Incoming)  // ["ana"]
+all, _    := store.Neighbors("knows", "ana", db.Both)      // deduped union</code></pre>
+<h3>BFS traversal — Traverse</h3>
+<pre><code>nodes, _ := store.Traverse(db.TraverseOptions{
+    EdgeType:  "knows",
+    Start:     "ana",
+    Direction: db.Outgoing,  // default
+    MaxDepth:  2,            // default 5, max 32
+    MinDepth:  1,            // exclude start (depth 0)
+    Limit:     100,          // default 10000, max 100000
+})
+for _, n := range nodes {
+    fmt.Println(n.Vertex, "at", n.Depth, "hops")
+}</code></pre>
+<h3>Shortest path — ShortestPath</h3>
+<pre><code>path, _ := store.ShortestPath("knows", "ana", "carla", 4)
+// ["ana", "carla"]  (direct edge)
+
+path, _ = store.ShortestPath("knows", "carla", "bob", 4)
+// ["carla", "ana", "bob"]  (2 hops) · nil when no path</code></pre>
+<h3>Graph + RBAC</h3>
+<pre><code>sess, _ := store.Authenticate("ana", "secret")
+sess.AddEdge("knows", "ana", "dave", nil)
+sess.Neighbors("knows", "ana", db.Outgoing)
+sess.Traverse(db.TraverseOptions{EdgeType: "knows", Start: "ana"})
+sess.ShortestPath("knows", "ana", "dave", 3)</code></pre>
+<h3>Example: recommendation network</h3>
+<pre><code>// friends of friends (exactly depth 2)
+nodes, _ := store.Traverse(db.TraverseOptions{
+    EdgeType: "knows", Start: "ana", MinDepth: 2, MaxDepth: 2,
+})
+for _, n := range nodes {
+    if path, _ := store.ShortestPath("knows", "ana", n.Vertex, 3); path != nil {
+        fmt.Printf("suggestion %s ← %v\n", n.Vertex, path)
+    }
+}</code></pre>
+<blockquote>Multiple edges between the same pair are deduplicated; the CSR cache self-invalidates on any <code>edges.*</code> mutation; different types are independent graphs.</blockquote>
+</section>
+
+<!-- ============ ES 09 ============ -->
+<section class="content lang-es" data-topic="09">
+<h2>09 · Servidor Mongo-compatible</h2>
+<p><code>mls-server</code> expone la BD por TCP hablando el <b>wire protocol de MongoDB</b> (subset OP_MSG + legado), para Navicat, Compass o mongosh sin escribir código.</p>
+<h3>Arrancar</h3>
+<pre><code># in-memory
+go run ./tools/mls-server -addr 127.0.0.1:27017 -db demo
+
+# archivo cifrado
+go run ./tools/mls-server -addr 127.0.0.1:27017 \
+    -path datos.mlstore -key "mi-clave-maestra-de-32-bytes!!" -db midb
+
+# con SCRAM-SHA-256 (opcional)
+go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
+    -key "mi-clave" -db midb -user admin -pass secreto</code></pre>
+<table>
+<tr><th>Flag</th><th>Default</th><th>Descripción</th></tr>
+<tr><td><code>-addr</code></td><td>127.0.0.1:27017</td><td>Dirección de escucha</td></tr>
+<tr><td><code>-path</code></td><td>(memoria)</td><td>Archivo .mlstore</td></tr>
+<tr><td><code>-db</code></td><td>nombre del archivo</td><td>Nombre de la BD que ven los clientes</td></tr>
+<tr><td><code>-key</code></td><td>—</td><td>Master key (requerida para archivos cifrados)</td></tr>
+<tr><td><code>-user / -pass</code></td><td>—</td><td>Habilita SCRAM-SHA-256 en el wire</td></tr>
+</table>
+<h3>Conectar</h3>
+<table>
+<tr><th>Cliente</th><th>Cadena</th></tr>
+<tr><td>mongosh</td><td><code>mongosh mongodb://127.0.0.1:27017</code></td></tr>
+<tr><td>Compass</td><td><code>mongodb://127.0.0.1:27017</code></td></tr>
+<tr><td>Navicat</td><td>Host 127.0.0.1 · port 27017 · sin auth</td></tr>
+<tr><td>Con auth</td><td><code>mongodb://admin:secreto@127.0.0.1:27017</code></td></tr>
+</table>
+<h3>Comandos soportados</h3>
+<table>
+<tr><th>Grupo</th><th>Comandos</th></tr>
+<tr><td>Handshake</td><td>hello, isMaster, ping, buildInfo, getLog, connectionStatus, whatsmyuri, serverStatus</td></tr>
+<tr><td>Sesiones</td><td>startSession, endSessions, logout</td></tr>
+<tr><td>CRUD</td><td>insert, find, getMore, killCursors, count, countDocuments, estimatedDocumentCount, distinct, update, delete, findAndModify</td></tr>
+<tr><td>Aggregate</td><td>$match $sort $skip $limit $count $group $unwind $project $lookup</td></tr>
+<tr><td>Admin</td><td>listDatabases, listCollections, create, drop, createIndexes, listIndexes, dropIndexes, dbStats, collStats</td></tr>
+<tr><td>Auth</td><td>saslStart / saslContinue (SCRAM-SHA-256)</td></tr>
+</table>
+<h3>Particularidades del subset</h3>
+<ul>
+<li><code>_id</code>: ObjectId y números se normalizan a string (hex del ObjectId).</li>
+<li>Números: BSON int32/int64/double — el motor es numérico tipo JSON (5 y 5.0 son iguales al filtrar).</li>
+<li>Sort multi-clave: se aplica en orden alfabético de campos.</li>
+<li>Proyecciones punteadas y <code>$elemMatch/$size/$type/$mod/$all/$expr</code> no soportados.</li>
+<li>Cursores con TTL de 10 min de inactividad; batch default 101 docs.</li>
+<li><code>maxBsonObjectSize</code> = 1 MB (límite real del motor).</li>
+</ul>
+<h3>Sesión completa (mongosh)</h3>
+<pre><code>// mongosh mongodb://127.0.0.1:27017
+use midb
+db.createCollection("clientes")
+db.clientes.insertOne({ _id: "c1", nombre: "Ana", email: "ana@x.com" })
+db.clientes.createIndex({ email: 1 }, { unique: true })
+db.clientes.find({ nombre: /^A/ })
+db.clientes.aggregate([{ $group: { _id: "$city", n: { $sum: 1 } } }])
+db.clientes.updateOne({ _id: "c1" }, { $set: { nivel: "gold" } })
+db.clientes.deleteOne({ _id: "c1" })
+db.clientes.drop()</code></pre>
+</section>
+
+<!-- ============ EN 09 ============ -->
+<section class="content lang-en" data-topic="09">
+<h2>09 · Mongo-compatible server</h2>
+<p><code>mls-server</code> exposes the DB over TCP speaking the <b>MongoDB wire protocol</b> (OP_MSG + legacy subset), for Navicat, Compass or mongosh without writing code.</p>
+<h3>Starting it</h3>
+<pre><code># in-memory
+go run ./tools/mls-server -addr 127.0.0.1:27017 -db demo
+
+# encrypted file
+go run ./tools/mls-server -addr 127.0.0.1:27017 \
+    -path data.mlstore -key "my-32-bytes-long-master-key!!" -db mydb
+
+# with SCRAM-SHA-256 (optional)
+go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
+    -key "my-key" -db mydb -user admin -pass secret</code></pre>
+<table>
+<tr><th>Flag</th><th>Default</th><th>Description</th></tr>
+<tr><td><code>-addr</code></td><td>127.0.0.1:27017</td><td>Listen address</td></tr>
+<tr><td><code>-path</code></td><td>(memory)</td><td>.mlstore file</td></tr>
+<tr><td><code>-db</code></td><td>file name</td><td>Database name clients see</td></tr>
+<tr><td><code>-key</code></td><td>—</td><td>Master key (required for encrypted files)</td></tr>
+<tr><td><code>-user / -pass</code></td><td>—</td><td>Enables SCRAM-SHA-256 on the wire</td></tr>
+</table>
+<h3>Connecting</h3>
+<table>
+<tr><th>Client</th><th>String</th></tr>
+<tr><td>mongosh</td><td><code>mongosh mongodb://127.0.0.1:27017</code></td></tr>
+<tr><td>Compass</td><td><code>mongodb://127.0.0.1:27017</code></td></tr>
+<tr><td>Navicat</td><td>Host 127.0.0.1 · port 27017 · no auth</td></tr>
+<tr><td>With auth</td><td><code>mongodb://admin:secret@127.0.0.1:27017</code></td></tr>
+</table>
+<h3>Supported commands</h3>
+<table>
+<tr><th>Group</th><th>Commands</th></tr>
+<tr><td>Handshake</td><td>hello, isMaster, ping, buildInfo, getLog, connectionStatus, whatsmyuri, serverStatus</td></tr>
+<tr><td>Sessions</td><td>startSession, endSessions, logout</td></tr>
+<tr><td>CRUD</td><td>insert, find, getMore, killCursors, count, countDocuments, estimatedDocumentCount, distinct, update, delete, findAndModify</td></tr>
+<tr><td>Aggregate</td><td>$match $sort $skip $limit $count $group $unwind $project $lookup</td></tr>
+<tr><td>Admin</td><td>listDatabases, listCollections, create, drop, createIndexes, listIndexes, dropIndexes, dbStats, collStats</td></tr>
+<tr><td>Auth</td><td>saslStart / saslContinue (SCRAM-SHA-256)</td></tr>
+</table>
+<h3>Subset specifics</h3>
+<ul>
+<li><code>_id</code>: ObjectIds and numbers are normalized to strings (ObjectId hex).</li>
+<li>Numbers: BSON int32/int64/double — the engine is JSON-numeric (5 and 5.0 compare equal).</li>
+<li>Multi-key sort: applied in alphabetical field order.</li>
+<li>Dotted projections and <code>$elemMatch/$size/$type/$mod/$all/$expr</code> not supported.</li>
+<li>Cursors with a 10-minute idle TTL; default batch 101 docs.</li>
+<li><code>maxBsonObjectSize</code> = 1 MB (the engine's real limit).</li>
+</ul>
+<h3>Full session (mongosh)</h3>
+<pre><code>// mongosh mongodb://127.0.0.1:27017
+use mydb
+db.createCollection("customers")
+db.customers.insertOne({ _id: "c1", nombre: "Ana", email: "ana@x.com" })
+db.customers.createIndex({ email: 1 }, { unique: true })
+db.customers.find({ nombre: /^A/ })
+db.customers.aggregate([{ $group: { _id: "$city", n: { $sum: 1 } } }])
+db.customers.updateOne({ _id: "c1" }, { $set: { level: "gold" } })
+db.customers.deleteOne({ _id: "c1" })
+db.customers.drop()</code></pre>
+</section>
+
+</main>
+
+<footer>MLStoreDB · Manual · <span id="footer-year"></span></footer>
+
+<script>
+const TOPICS = [
+  { id: "01", es: "Conexión",     en: "Connection" },
+  { id: "02", es: "Insertar",     en: "Insert" },
+  { id: "03", es: "Consultar",    en: "Select" },
+  { id: "04", es: "Actualizar",   en: "Update" },
+  { id: "05", es: "Eliminar",     en: "Delete" },
+  { id: "06", es: "Joins",        en: "Joins" },
+  { id: "07", es: "Triggers",     en: "Triggers" },
+  { id: "08", es: "Grafos",       en: "Graphs" },
+  { id: "09", es: "Servidor Mongo", en: "Mongo server" },
+];
+
+let lang = "es";
+let topic = "01";
+
+const tabsEl = document.getElementById("tabs");
+
+function renderTabs() {
+  tabsEl.innerHTML = "";
+  for (const t of TOPICS) {
+    const btn = document.createElement("button");
+    btn.dataset.topic = t.id;
+    const label = lang === "es" ? t.es : t.en;
+    btn.innerHTML = '<span class="num">' + t.id + "</span>" + label;
+    btn.className = t.id === topic ? "active" : "";
+    btn.onclick = () => setTopic(t.id);
+    tabsEl.appendChild(btn);
+  }
+}
+
+function render() {
+  document.querySelectorAll(".content").forEach((el) => {
+    el.classList.toggle(
+      "visible",
+      el.dataset.topic === topic && el.classList.contains("lang-" + lang)
+    );
+  });
+  document.getElementById("btn-es").className = lang === "es" ? "active" : "";
+  document.getElementById("btn-en").className = lang === "en" ? "active" : "";
+  document.documentElement.lang = lang;
+  document.getElementById("hdr-title").textContent =
+    lang === "es" ? "Manual" : "Manual";
+  renderTabs();
+}
+
+function setLang(l) {
+  lang = l;
+  render();
+}
+
+function setTopic(t) {
+  topic = t;
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.getElementById("footer-year").textContent = new Date().getFullYear();
+render();
+</script>
+</body>
+</html>
