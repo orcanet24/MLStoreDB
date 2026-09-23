@@ -1,9 +1,9 @@
 [README.md](https://github.com/user-attachments/files/32547140/README.md)
 # proyecto_bd — Motor de base de datos multipropósito (JSON + índices + cifrado)
 
-Documentación completa del motor `mlstore` para **recrear un motor de BD propio, aislado del proyecto Mercado Libre**.
+Documentación completa del motor `mlstore` para **recrear un motor de BD propio**.
 
-Este directorio describe el motor tal como está hoy: arquitectura, distribución de archivos, formato binario, API, lenguaje de consulta, persistencia, pruebas y benchmarks. No depende de colecciones ni dominio ML: todo lo específico de Mercado Libre queda fuera.
+Este directorio describe el motor tal como está hoy: arquitectura, distribución de archivos, formato binario, API, lenguaje de consulta, persistencia, pruebas y benchmarks.
 
 | | |
 |---|---|
