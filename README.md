@@ -1,4 +1,4 @@
---- README.md (原始)
+--- README.md
 [README.md](https://github.com/user-attachments/files/32547140/README.md)
 # proyecto_bd — Motor de base de datos multipropósito (JSON + índices + cifrado)
 
@@ -134,12 +134,12 @@ Ver [RECREAR.md](RECREAR.md) para extraer a módulo independiente.
 | M5b Triggers JSON declarativos | ✅ |
 | M6 Grafo (`edges.*`, Neighbors/Traverse/ShortestPath) | ✅ |
 | M7 Docs + benchmarks + race final | ✅ |
-| M8 Wire protocol Mongo-compatible | ⬜ pendiente de aprobación |
+| M8 Wire protocol Mongo-compatible | ⬜ pendiente |
 
 Docs de motor: `doc/*`, bitácora `doc/PLAN_V2.md`, `scripts/test-race.ps1` (`-race` con CGO+gcc MSYS2).
 
 
-+++ README.md (修改后)
++++ README.md 
 # mlstoredb — Motor de base de datos JSON con grafo embebido
 
 > **Origen del proyecto:** Este proyecto nace de la necesidad de fabricar un CRM para gestiones de Mercado Libre. Al trabajar con respuestas JSON, me di cuenta que era más simple almacenar y procesar directamente desde JSON en lugar de usar un motor SQL tradicional. Para las relaciones entre datos, busqué algo similar a Neo4j que permitiera conexiones espaciales eficientes, y así surgieron los grafos integrados en este motor.
