@@ -134,7 +134,7 @@ Ver [RECREAR.md](RECREAR.md) para extraer a módulo independiente.
 | M5b Triggers JSON declarativos | ✅ |
 | M6 Grafo (`edges.*`, Neighbors/Traverse/ShortestPath) | ✅ |
 | M7 Docs + benchmarks + race final | ✅ |
-| M8 Wire protocol Mongo-compatible | ⬜ pendiente |
+| M8 Wire protocol Mongo-compatible | ✅ |
 
 Docs de motor: `doc/*`, bitácora `doc/PLAN_V2.md`, `scripts/test-race.ps1` (`-race` con CGO+gcc MSYS2).
 
