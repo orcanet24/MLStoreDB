@@ -222,9 +222,9 @@ sess, err := store.Authenticate("ana", "secreto")
 docs, _ := sess.Find("orders", db.Document{"status": "PAID"}, nil)</code></pre>
 <blockquote>Sin usuarios la API cruda funciona sin restricciones; con ≥1 usuario la API cruda devuelve <code>ErrUnauthorized</code> y hay que usar la <code>Session</code>.</blockquote>
 <h3>Desde clientes Mongo</h3>
-<pre><code>go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
+<pre><code>go run ./tools/mls-server -addr 127.0.0.1:28917 -path datos.mlstore \
     -key "mi-clave-maestra-de-32-bytes!!" -db midb</code></pre>
-<p>Conéctate con <code>mongodb://127.0.0.1:27017</code> (Navicat / Compass / mongosh). Detalle en la pestaña 09.</p>
+<p>Conéctate con <code>mongodb://127.0.0.1:28917</code> (Navicat / Compass / mongosh). Detalle en la pestaña 09.</p>
 </section>
 
 <!-- ============ EN 01 ============ -->
@@ -270,9 +270,9 @@ sess, err := store.Authenticate("ana", "secret")
 docs, _ := sess.Find("orders", db.Document{"status": "PAID"}, nil)</code></pre>
 <blockquote>With no users the raw API works unrestricted; with ≥1 user the raw API returns <code>ErrUnauthorized</code> and you must use the <code>Session</code>.</blockquote>
 <h3>From Mongo clients</h3>
-<pre><code>go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
+<pre><code>go run ./tools/mls-server -addr 127.0.0.1:28917 -path data.mlstore \
     -key "my-32-bytes-long-master-key!!" -db mydb</code></pre>
-<p>Connect with <code>mongodb://127.0.0.1:27017</code> (Navicat / Compass / mongosh). Details in tab 09.</p>
+<p>Connect with <code>mongodb://127.0.0.1:28917</code> (Navicat / Compass / mongosh). Details in tab 09.</p>
 </section>
 
 <!-- ============ ES 02 ============ -->
@@ -1031,30 +1031,31 @@ for _, n := range nodes {
 <p><code>mls-server</code> expone la BD por TCP hablando el <b>wire protocol de MongoDB</b> (subset OP_MSG + legado), para Navicat, Compass o mongosh sin escribir código.</p>
 <h3>Arrancar</h3>
 <pre><code># in-memory
-go run ./tools/mls-server -addr 127.0.0.1:27017 -db demo
+go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 
 # archivo cifrado
-go run ./tools/mls-server -addr 127.0.0.1:27017 \
+go run ./tools/mls-server -addr 127.0.0.1:28917 \
     -path datos.mlstore -key "mi-clave-maestra-de-32-bytes!!" -db midb
 
 # con SCRAM-SHA-256 (opcional)
-go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
+go run ./tools/mls-server -addr 127.0.0.1:28917 -path datos.mlstore \
     -key "mi-clave" -db midb -user admin -pass secreto</code></pre>
 <table>
 <tr><th>Flag</th><th>Default</th><th>Descripción</th></tr>
-<tr><td><code>-addr</code></td><td>127.0.0.1:27017</td><td>Dirección de escucha</td></tr>
+<tr><td><code>-addr</code></td><td>127.0.0.1:28917</td><td>Dirección de escucha</td></tr>
 <tr><td><code>-path</code></td><td>(memoria)</td><td>Archivo .mlstore</td></tr>
 <tr><td><code>-db</code></td><td>nombre del archivo</td><td>Nombre de la BD que ven los clientes</td></tr>
 <tr><td><code>-key</code></td><td>—</td><td>Master key (requerida para archivos cifrados)</td></tr>
 <tr><td><code>-user / -pass</code></td><td>—</td><td>Habilita SCRAM-SHA-256 en el wire</td></tr>
 </table>
 <h3>Conectar</h3>
+<p>Puerto propio de MLStoreDB: <span class="note">28917</span> (no colisiona con un MongoDB real en 27017).</p>
 <table>
 <tr><th>Cliente</th><th>Cadena</th></tr>
-<tr><td>mongosh</td><td><code>mongosh mongodb://127.0.0.1:27017</code></td></tr>
-<tr><td>Compass</td><td><code>mongodb://127.0.0.1:27017</code></td></tr>
-<tr><td>Navicat</td><td>Host 127.0.0.1 · port 27017 · sin auth</td></tr>
-<tr><td>Con auth</td><td><code>mongodb://admin:secreto@127.0.0.1:27017</code></td></tr>
+<tr><td>mongosh</td><td><code>mongosh mongodb://127.0.0.1:28917</code></td></tr>
+<tr><td>Compass</td><td><code>mongodb://127.0.0.1:28917</code></td></tr>
+<tr><td>Navicat</td><td>Host 127.0.0.1 · port 28917 · sin auth</td></tr>
+<tr><td>Con auth</td><td><code>mongodb://admin:secreto@127.0.0.1:28917</code></td></tr>
 </table>
 <h3>Comandos soportados</h3>
 <table>
@@ -1076,7 +1077,7 @@ go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
 <li><code>maxBsonObjectSize</code> = 1 MB (límite real del motor).</li>
 </ul>
 <h3>Sesión completa (mongosh)</h3>
-<pre><code>// mongosh mongodb://127.0.0.1:27017
+<pre><code>// mongosh mongodb://127.0.0.1:28917
 use midb
 db.createCollection("clientes")
 db.clientes.insertOne({ _id: "c1", nombre: "Ana", email: "ana@x.com" })
@@ -1094,30 +1095,31 @@ db.clientes.drop()</code></pre>
 <p><code>mls-server</code> exposes the DB over TCP speaking the <b>MongoDB wire protocol</b> (OP_MSG + legacy subset), for Navicat, Compass or mongosh without writing code.</p>
 <h3>Starting it</h3>
 <pre><code># in-memory
-go run ./tools/mls-server -addr 127.0.0.1:27017 -db demo
+go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 
 # encrypted file
-go run ./tools/mls-server -addr 127.0.0.1:27017 \
+go run ./tools/mls-server -addr 127.0.0.1:28917 \
     -path data.mlstore -key "my-32-bytes-long-master-key!!" -db mydb
 
 # with SCRAM-SHA-256 (optional)
-go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
+go run ./tools/mls-server -addr 127.0.0.1:28917 -path data.mlstore \
     -key "my-key" -db mydb -user admin -pass secret</code></pre>
 <table>
 <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
-<tr><td><code>-addr</code></td><td>127.0.0.1:27017</td><td>Listen address</td></tr>
+<tr><td><code>-addr</code></td><td>127.0.0.1:28917</td><td>Listen address</td></tr>
 <tr><td><code>-path</code></td><td>(memory)</td><td>.mlstore file</td></tr>
 <tr><td><code>-db</code></td><td>file name</td><td>Database name clients see</td></tr>
 <tr><td><code>-key</code></td><td>—</td><td>Master key (required for encrypted files)</td></tr>
 <tr><td><code>-user / -pass</code></td><td>—</td><td>Enables SCRAM-SHA-256 on the wire</td></tr>
 </table>
 <h3>Connecting</h3>
+<p>MLStoreDB's own port: <span class="note">28917</span> (no clash with a real MongoDB on 27017).</p>
 <table>
 <tr><th>Client</th><th>String</th></tr>
-<tr><td>mongosh</td><td><code>mongosh mongodb://127.0.0.1:27017</code></td></tr>
-<tr><td>Compass</td><td><code>mongodb://127.0.0.1:27017</code></td></tr>
-<tr><td>Navicat</td><td>Host 127.0.0.1 · port 27017 · no auth</td></tr>
-<tr><td>With auth</td><td><code>mongodb://admin:secret@127.0.0.1:27017</code></td></tr>
+<tr><td>mongosh</td><td><code>mongosh mongodb://127.0.0.1:28917</code></td></tr>
+<tr><td>Compass</td><td><code>mongodb://127.0.0.1:28917</code></td></tr>
+<tr><td>Navicat</td><td>Host 127.0.0.1 · port 28917 · no auth</td></tr>
+<tr><td>With auth</td><td><code>mongodb://admin:secret@127.0.0.1:28917</code></td></tr>
 </table>
 <h3>Supported commands</h3>
 <table>
@@ -1139,7 +1141,7 @@ go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
 <li><code>maxBsonObjectSize</code> = 1 MB (the engine's real limit).</li>
 </ul>
 <h3>Full session (mongosh)</h3>
-<pre><code>// mongosh mongodb://127.0.0.1:27017
+<pre><code>// mongosh mongodb://127.0.0.1:28917
 use mydb
 db.createCollection("customers")
 db.customers.insertOne({ _id: "c1", nombre: "Ana", email: "ana@x.com" })

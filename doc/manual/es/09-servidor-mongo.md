@@ -8,22 +8,22 @@ Compass o mongosh sin escribir código.
 
 ```bash
 # in-memory (pruebas rápidas)
-go run ./tools/mls-server -addr 127.0.0.1:27017 -db demo
+go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 
 # archivo cifrado
-go run ./tools/mls-server -addr 127.0.0.1:27017 \
+go run ./tools/mls-server -addr 127.0.0.1:28917 \
     -path datos.mlstore \
     -key "mi-clave-maestra-de-32-bytes!!" \
     -db midb
 
 # con autenticación SCRAM-SHA-256 (opcional)
-go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
+go run ./tools/mls-server -addr 127.0.0.1:28917 -path datos.mlstore \
     -key "mi-clave" -db midb -user admin -pass secreto
 ```
 
 | Flag | Default | Descripción |
 |---|---|---|
-| `-addr` | `127.0.0.1:27017` | Dirección de escucha |
+| `-addr` | `127.0.0.1:28917` | Dirección de escucha (puerto propio de MLStoreDB, no colisiona con un MongoDB real en 27017) |
 | `-path` | *(memoria)* | Archivo `.mlstore` |
 | `-db` | nombre del archivo | Nombre de la BD que ven los clientes |
 | `-key` | — | Master key (requerida para archivos cifrados) |
@@ -35,10 +35,10 @@ go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
 
 | Cliente | Cadena / configuración |
 |---|---|
-| mongosh | `mongosh mongodb://127.0.0.1:27017` |
-| Compass | `mongodb://127.0.0.1:27017` |
-| Navicat | Host `127.0.0.1`, port `27017`, sin autenticación |
-| Con auth | `mongodb://admin:secreto@127.0.0.1:27017` |
+| mongosh | `mongosh mongodb://127.0.0.1:28917` |
+| Compass | `mongodb://127.0.0.1:28917` |
+| Navicat | Host `127.0.0.1`, port `28917`, sin autenticación |
+| Con auth | `mongodb://admin:secreto@127.0.0.1:28917` |
 
 > Modelo de datos: el servidor expone **una base de datos** (la del
 > flag `-db`) con todas las colecciones del store. Los comandos se
@@ -79,7 +79,7 @@ go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
 ## Ejemplo de sesión completa (mongosh)
 
 ```javascript
-// conectar: mongosh mongodb://127.0.0.1:27017
+// conectar: mongosh mongodb://127.0.0.1:28917
 use midb
 
 db.createCollection("clientes")

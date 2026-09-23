@@ -1,265 +1,167 @@
---- README.md
-[README.md](https://github.com/user-attachments/files/32547140/README.md)
-# proyecto_bd — Motor de base de datos multipropósito (JSON + índices + cifrado)
+# MLStoreDB
 
-Documentación completa del motor `mlstore` para **recrear un motor de BD propio**.
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-201%20PASS%20%2F%200%20FAIL-brightgreen)
+![Race](https://img.shields.io/badge/-race-green)
+![Licencia](https://img.shields.io/badge/tipo-embebida%20%2B%20servidor-blue)
 
-Este directorio describe el motor tal como está hoy: arquitectura, distribución de archivos, formato binario, API, lenguaje de consulta, persistencia, pruebas y benchmarks.
+> **Un archivo cifrado. Documentos JSON. Grafos nativos. Triggers. Y se conecta con tus herramientas de MongoDB favoritas — sin ser MongoDB.**
+
+---
+
+## La historia
+
+MLStoreDB no nació en un laboratorio. Nació de un problema real: un **CRM con datos 100% JSON**.
+
+Al construirlo nos dimos cuenta de algo: órdenes, compradores, envíos, items con estructuras anidadas e impredecibles — **todo era JSON**. Forzarlo a tablas relacionales era pelear contra la naturaleza de los datos. La respuesta obvia era acceso directo al JSON, al estilo MongoDB.
+
+Pero entonces pensamos: **¿y si vamos más lejos?**
+
+- Un vendedor conecta con compradores, que conectan con órdenes… eso es un **grafo**. ¿Por qué no tenerlo nativo, como Neo4j, sin otra base de datos más?
+- Cuando entra una orden pagada queremos auditar, contar, notificar… eso son **triggers**. ¿Por qué no declararlos en JSON y que vivan dentro de la BD?
+- Los datos son sensibles. ¿Por qué cifrar es un extra y no el **default**?
+
+El resultado: una base de datos documental **simple, cifrada y de alto rendimiento** — una alternativa ligera a MongoDB para cuando no quieres (o no puedes) montar un clúster.
+
+## ¿Qué es MLStoreDB?
 
 | | |
 |---|---|
-| **Nombre interno** | `mlstore` (módulo `mlstoredb`, package `db`) |
-| **Lenguaje** | Go 1.26 (CGO solo para `-race` en tests) |
-| **Tipo** | Document store embebido (estilo MongoDB) |
-| **Persistencia** | 1 archivo cifrado, formato **v2** (log de records + AES-256-GCM + Argon2id) |
-| **Modelo** | Docs en RAM con page cache (budget `Options.CacheBytes`); snapshot cifrado |
-| **Tests** | **167 PASS / 0 FAIL** |
-| **Producción** | ~7.365 líneas · **Tests** ~5.136 líneas · **Total** 40 archivos `.go` en `db/` (+ `tools/`) |
+| **Tipo** | Document store embebido (JSON con `_id`) + grafos + triggers |
+| **Persistencia** | **1 solo archivo cifrado** (AES-256-GCM, Argon2id) — backup = copiar un archivo |
+| **Acceso** | API Go embebida (como SQLite) **o** servidor con wire protocol Mongo-compatible |
+| **Índices** | Hash + ordenados con matriz CSR persistida; unique, compound, rangos |
+| **Seguridad** | RBAC embebido: usuarios, roles, permisos por colección, `fieldDeny`, sesiones |
+| **Grafos** | Aristas tipadas (`edges.<tipo>`), `Neighbors`, `Traverse` (BFS), `ShortestPath` |
+| **Automatización** | Hooks Go (`before`/`after`, veto) + triggers JSON declarativos persistidos |
+| **Memoria** | Page cache con presupuesto (`CacheBytes`) — heap estable al crecer los datos |
+| **Concurrencia** | RWMutex + striping, Find paralelo, backpressure de escrituras, `-race` verde |
 
----
+### No es MongoDB. Se conecta como MongoDB.
 
-## Índice
+MLStoreDB **habla el wire protocol de MongoDB** (subset `OP_MSG` + legado): apuntas **Compass, Navicat o mongosh** a `mongodb://127.0.0.1:28917` y funcionan — explorar colecciones, CRUD, `aggregate` con `$lookup`/`$group`, índices. Pero debajo no hay ningún código de MongoDB: es un motor propio, un archivo cifrado, sin instalación ni infraestructura. Es "habla mi idioma", no "soy tu base de datos".
 
-1. [ARQUITECTURA](ARQUITECTURA.md) — componentes, modelo de datos, concurrencia, ciclo de vida
-2. [DISTRIBUCION_ARCHIVOS](DISTRIBUCION_ARCHIVOS.md) — mapa de archivos, líneas, responsabilidad de cada uno
-3. [FORMATO_ARCHIVO](FORMATO_ARCHIVO.md) — layout del `.mlstore`, jerarquía de claves, flush atómico
-4. [API](API.md) — API pública Go completa con ejemplos (CRUD, auth, hooks, triggers, grafo)
-5. [CONSULTAS](CONSULTAS.md) — filtros, índices, planner, sort, `Explain`
-6. [PRUEBAS](PRUEBAS.md) — suites, cobertura por área, cómo correrlas, benchmarks
-7. [RECREAR](RECREAR.md) — guía paso a paso para extraer el motor a un módulo propio
-8. [PLAN_V2](PLAN_V2.md) — bitácora del plan v2 (M0→M8): RBAC, hooks, triggers, grafo
+## Rendimiento (en una laptop de 2011, sí, 2011)
 
-**Estado v2:** plan M0–M7 cerrado — extracción a `package db`, formato v2 paginado +
-page cache, `index_matrix` CSR persistida, Find paralelo + backpressure + Update COW,
-RBAC embebido (`Authenticate`→`Session`, `_users`/`_roles`), hooks Go, triggers
-JSON declarativos y grafo (`edges.<tipo>`, `Neighbors`/`Traverse`/`ShortestPath`).
-Estadísticas: **167 PASS / 0 FAIL**, 40 archivos `.go` en `db/` (prod 7.365 L ·
-tests 5.136 L), `-race` verde.
+Medido en un **Intel i5-2430M** con carga end-to-end de 10.000 documentos con payload real:
 
----
+| Operación | Por operación | Nota |
+|---|---:|---|
+| **Lectura por `_id`** | **~5–10 µs** | índice hash, sin tocar disco |
+| **Insert** | **~30–50 µs** | 10k docs ≈ 0.3–0.5 s |
+| **Find con índice** | 1.7–1.9× más rápido que el scan | índice single-field |
+| **Count con índice** | **~5 µs** | O(1) vía `countKey` |
+| **Página 20 con índice+sort+limit** | ~2.5 ms | sobre 10k docs complejos |
+| **Lectura JSON complejo anidado** | **~24 µs** | deep-clone incluido |
+| **Reabrir 10k docs cifrados** | ~100–420 ms | Argon2 + descifrado + rebuild |
 
-## Qué es (y qué no es)
+> Si esto corre así en una laptop de 2011, imagínalo en hardware moderno — o en un ARM de borde consumiendo vatios.
 
-**Es:**
-- Document store JSON con `_id` string
-- Índices hash + ordenados (equality, `$in`, rangos, prefijo compuesto, sort por índice) + matriz CSR persistida (`index_matrix`)
-- Un solo archivo cifrado en disco (formato v2: log de records + COMMIT); backup = copiar 1 archivo
-- API estilo Mongo acotada: `Insert/Upsert/Update/Delete/Get/Find/Count`
-- RBAC embebido (usuarios/roles/permisos, sesiones con TTL) y export CSV
-- Hooks Go (`before`/`after` por evento) + triggers JSON declarativos
-- Grafo: colecciones `edges.<tipo>` con `Neighbors`/`Traverse`/`ShortestPath`
-- Migraciones de esquema forward-only
-- Seguro para concurrencia en un proceso (RWMutex + flock + backpressure de escrituras)
-- `FlushSync`/`SyncOnWrite` (durabilidad inmediata) + `Repair()` (H6)
+**Diseñada para ser rápida donde importa:** docs calientes en RAM (page cache con presupuesto), índices CSR pre-materializados que se cargan en microsegundos, Find paralelo acotado a los cores, y flush cifrado append-only con commit point atómico.
 
-**No es:**
-- SQL, transacciones multi-colección, joins, aggregation pipelines
-- Multi-proceso writer (un solo dueño del archivo)
-- WAL / ledger financiero (pérdida máxima ~2s en crash; `FlushSync`/`SyncOnWrite` para durabilidad inmediata)
-- ORM ni servidor de red (es embebido, in-process; el wire protocol Mongo es M8 pendiente)
+## Empieza en 30 segundos
 
----
-
-## Arranque mínimo (aislado de ML)
+### Modo embebido (como SQLite, pero documental)
 
 ```go
-package main
+import "mlstoredb/db"
 
-import (
-    "fmt"
-    "mlstoredb/db" // package extraído (módulo mlstoredb)
-)
+store, _ := db.OpenWithLock("crm.mlstore", db.Options{
+    MasterKey: []byte("mi-clave-maestra-de-32-bytes!!"),
+})
+defer store.Close()
 
-func main() {
-    s, err := db.OpenWithLock("datos.db", db.Options{
-        MasterKey: []byte("clave-maestra-32-bytes-long!!!!"),
-        MachineID: "mi-app",       // "" = MachineGuid (Windows) o "default"
-        LightKDF:  false,          // true solo en tests
-        // SyncOnWrite: true,      // opcional: cada mutación es durable al retornar
-        // CacheBytes: 256<<20,    // presupuesto page cache (0=default, <0=ilimitado)
-    })
-    if err != nil { panic(err) }
-    defer s.Close()
+store.Insert("orders", db.Document{
+    "_id": "o1", "total": 250, "buyer_id": "c1",
+    "items": []any{db.Document{"sku": "A1", "qty": 2}},
+})
 
-    _ = s.EnsureIndex("usuarios", []string{"email"}, true)
-
-    _ = s.Insert("usuarios", db.Document{
-        "_id":   "u1",
-        "email": "ana@ejemplo.com",
-        "perfil": db.Document{"nombre": "Ana"},
-    })
-
-    docs, _ := s.Find("usuarios", db.Document{"email": "ana@ejemplo.com"}, nil)
-    fmt.Println(len(docs), docs[0]["perfil"])
-
-    // RBAC (opcional): al crear el primer usuario, el API cruda exige sesión
-    _ = s.CreateRole("admin", []db.Permission{{Collection: "*", Read: true, Write: true}})
-    _ = s.CreateUser("root", "segura-larga-1", []string{"admin"})
-    sess, _ := s.Authenticate("root", "segura-larga-1")
-    _, _ = sess.Find("usuarios", nil, nil)
-}
+docs, _ := store.Find("orders",
+    db.Document{"total": db.Document{"$gte": 100}},
+    &db.FindOptions{Sort: map[string]int{"total": -1}, Limit: 10})
 ```
 
-Ver [RECREAR.md](RECREAR.md) para extraer a módulo independiente.
-
----
-
-## Estado
-
-| Hito | Estado |
-|---|---|
-| M1 CRUD + RAM | ✅ |
-| M2 Filtros + sort/limit/skip/projection | ✅ |
-| M3 Índices + únicos + planner | ✅ |
-| M4 Formato + cifrado + Open/Close/Flush | ✅ |
-| M5 Snapshot + flock + auto-flush 2s | ✅ |
-| M6 ExportCSV + migraciones | ✅ |
-| M7 Benchmarks + límite 1MB/doc | ✅ |
-| H1 Índice ordenado + range seek | ✅ |
-| H2 Planner prefijo/rango + Explain | ✅ |
-| H3 Flush no bloqueante (dirtyGen) | ✅ |
-| H4 Deep clone | ✅ |
-| H5 Regex cache + MachineGuid + sensitive | ✅ |
-| H6 FlushSync/SyncOnWrite + Repair + tests corrupt + -race | ✅ |
-| H7 Machine ID por instalación (`ResolveMachineID`, ULID fuera de la BD) | ✅ |
-| H8 `RotateKeys` (re-wrap DEK header-only, sin re-cifrar payload) | ✅ |
-| H9 `Options` configurables (`AutoFlush`, `LockFile`) | ✅ |
-| **Plan v2** (ver [PLAN_V2](PLAN_V2.md)) | |
-| M0 Extracción a `package db` (módulo `mlstoredb`) | ✅ |
-| M1 Formato v2 paginado + page cache + `Compact` | ✅ |
-| M2 `index_matrix` CSR persistida | ✅ |
-| M3 Find paralelo + backpressure + Update COW | ✅ |
-| M4 RBAC embebido (users/roles/sessions) | ✅ |
-| M5a Hooks Go (before/after, sync/async) | ✅ |
-| M5b Triggers JSON declarativos | ✅ |
-| M6 Grafo (`edges.*`, Neighbors/Traverse/ShortestPath) | ✅ |
-| M7 Docs + benchmarks + race final | ✅ |
-| M8 Wire protocol Mongo-compatible | ✅ |
-
-Docs de motor: `doc/*`, bitácora `doc/PLAN_V2.md`, `scripts/test-race.ps1` (`-race` con CGO+gcc MSYS2).
-
-
-+++ README.md 
-# mlstoredb — Motor de base de datos JSON con grafo embebido
-
-> **Origen del proyecto:** Este proyecto nace de la necesidad de fabricar un CRM para gestiones de Mercado Libre. Al trabajar con respuestas JSON, me di cuenta que era más simple almacenar y procesar directamente desde JSON en lugar de usar un motor SQL tradicional. Para las relaciones entre datos, busqué algo similar a Neo4j que permitiera conexiones espaciales eficientes, y así surgieron los grafos integrados en este motor.
-
-**Autor:** Marcos Espinoza
-**Ubicación:** Yaracuy, Venezuela
-**Contacto:** orcanet1724@gmail.com
-**Licencia:** MIT (ver [LICENSE](LICENSE))
-
----
-
-## ¿Qué es mlstoredb?
-
-Un motor de base de datos multipropósito embebido escrito en Go, diseñado para trabajar nativamente con documentos JSON e incluir capacidades de grafo para relaciones complejas.
-
-### Características principales
-
-- **Document Store JSON**: Almacena y consulta documentos JSON con `_id` string
-- **Índices avanzados**: Hash, ordenados, compuestos, matriz CSR persistida
-- **Grafo integrado**: Colecciones `edges.<tipo>` con operaciones `Neighbors`, `Traverse` y `ShortestPath`
-- **Persistencia cifrada**: Un solo archivo `.mlstore` con AES-256-GCM + Argon2id
-- **RBAC embebido**: Usuarios, roles, permisos y sesiones con TTL
-- **Hooks y Triggers**: Extensibilidad mediante hooks en Go y triggers declarativos JSON
-- **Concurrencia segura**: RWMutex + flock + backpressure de escrituras
-
-### Estado actual
-
-| Componente | Estado |
-|---|---|
-| CRUD básico | ✅ |
-| Filtros + sort/limit/skip/projection | ✅ |
-| Índices + planner de consultas | ✅ |
-| Formato v2 paginado + page cache | ✅ |
-| RBAC (usuarios/roles/sesiones) | ✅ |
-| Hooks Go + Triggers JSON | ✅ |
-| Grafo (Neighbors/Traverse/ShortestPath) | ✅ |
-| Tests (-race) | ✅ 167 PASS / 0 FAIL |
-
----
-
-## Inicio rápido
-
-```go
-package main
-
-import (
-    "fmt"
-    "mlstoredb/db"
-)
-
-func main() {
-    s, err := db.OpenWithLock("datos.db", db.Options{
-        MasterKey: []byte("clave-maestra-32-bytes-long!!!!"),
-        MachineID: "mi-app",
-        LightKDF:  false,
-    })
-    if err != nil { panic(err) }
-    defer s.Close()
-
-    _ = s.EnsureIndex("usuarios", []string{"email"}, true)
-
-    _ = s.Insert("usuarios", db.Document{
-        "_id":   "u1",
-        "email": "ana@ejemplo.com",
-        "perfil": db.Document{"nombre": "Ana"},
-    })
-
-    docs, _ := s.Find("usuarios", db.Document{"email": "ana@ejemplo.com"}, nil)
-    fmt.Println(len(docs), docs[0]["perfil"])
-}
-```
-
----
-
-## Documentación completa
-
-| Documento | Descripción |
-|---|---|
-| [ARQUITECTURA.md](doc/ARQUITECTURA.md) | Componentes, modelo de datos, concurrencia, ciclo de vida |
-| [DISTRIBUCION_ARCHIVOS.md](doc/DISTRIBUCION_ARCHIVOS.md) | Mapa de archivos, líneas, responsabilidad de cada módulo |
-| [FORMATO_ARCHIVO.md](doc/FORMATO_ARCHIVO.md) | Layout del `.mlstore`, jerarquía de claves, flush atómico |
-| [API.md](doc/API.md) | API pública Go completa (CRUD, auth, hooks, triggers, grafo) |
-| [CONSULTAS.md](doc/CONSULTAS.md) | Filtros, índices, planner, sort, Explain |
-| [PRUEBAS.md](doc/PRUEBAS.md) | Suites de tests, cobertura, benchmarks |
-| [RECREAR.md](doc/RECREAR.md) | Guía para extraer el motor a un módulo propio |
-| [PLAN_V2.md](doc/PLAN_V2.md) | Bitácora del desarrollo v2 (M0→M8) |
-
----
-
-## Casos de uso
-
-- **CRM para eCommerce**: Gestión de pedidos, clientes y productos de Mercado Libre
-- **Almacenamiento JSON nativo**: Sin mapeo ORM, directo a documento
-- **Relaciones complejas**: Grafos para conexiones espaciales o redes de entidades
-- **Aplicaciones embebidas**: Base de datos en un solo archivo cifrado
-- **Prototipado rápido**: Esquemas flexibles con migraciones forward-only
-
----
-
-## Requisitos
-
-- Go 1.26+
-- CGO solo para tests con `-race` (requiere GCC/MSYS2 en Windows)
-
----
-
-## Instalación
+### Modo servidor (conecta Compass / Navicat / mongosh)
 
 ```bash
-go get mlstoredb/db
+go run ./tools/mls-server -addr 127.0.0.1:28917 -path crm.mlstore \
+    -key "mi-clave-maestra-de-32-bytes!!" -db crm
 ```
 
+```bash
+mongosh mongodb://127.0.0.1:28917
+```
+
+En Windows: doble clic a **`iniciar-servidor.bat`** y listo.
+
+### Grafos — relaciones nativas
+
+```go
+store.AddEdge("compro", "c1", "o1", db.Document{"canal": "web"})
+
+amigos, _ := store.Neighbors("knows", "ana", db.Outgoing)
+red, _    := store.Traverse(db.TraverseOptions{EdgeType: "knows", Start: "ana", MaxDepth: 2})
+ruta, _   := store.ShortestPath("knows", "ana", "carla", 4)
+```
+
+### Triggers — lógica que vive en la BD
+
+```go
+store.CreateTrigger(db.Trigger{
+    Event: "after_insert", Collection: "orders",
+    Filter: map[string]any{"status": "PAID"},
+    Actions: []db.TriggerAction{{
+        Type: "insert", Collection: "audit",
+        Doc: map[string]any{"ref": map[string]any{"$get": "_id"}, "note": "pagada"},
+    }},
+})
+```
+
+### Joins — 4 patrones para JSON anidado
+
+Sin `JOIN` de SQL, pero mejor: embebe documentos, batch con `$in` (2 queries, sin N+1), `$lookup` en `aggregate` desde mongosh, o modela la relación como grafo. Guía completa en el [manual, tema 06](doc/manual/es/06-joins.md).
+
+## ¿Para qué usarla?
+
+MLStoreDB brilla donde necesitas **datos estructurados ricos sin infraestructura**:
+
+- **CRMs y ERPs de escritorio** — un binario + un archivo cifrado, cero instalación de BD
+- **Sistemas embebidos / edge / IoT** — footprint mínimo, RAM acotada por presupuesto, sin servidor
+- **POS y retail** — opera local, sincroniza cuando hay red; el archivo cifrado viaja seguro
+- **Analytics embebido** — `aggregate` con `$group`/`$lookup` dentro de tu propio proceso
+- **Prototipos y MVPs** — la misma API que conoces de Mongo, sin Docker ni clúster
+- **Cualquier app Go** que hoy usa SQLite pero sueña con documentos y grafos
+
+## Bajo el capó
+
+- **Formato v2**: log de records cifrados (bitcask-style) + COMMIT como único commit point; self-heal ante torn-writes; migración automática v1→v2
+- **Cripto**: Argon2id deriva el KEK → DEK → AES-256-GCM por record; `RotateKeys` re-wrap sin re-cifrar
+- **Índices**: matriz CSR serializada dentro del payload IDX con CRC32-C y fallback automático
+- **Durabilidad a elección**: auto-flush 2s (default), `SyncOnWrite` por escritura, o RAM pura
+- **Robustez**: 201 tests (motor + wire), race detector verde, smoke + loadtest end-to-end, repair ante corrupción
+
+## Estado del proyecto
+
+| Fase | Estado |
+|---|---|
+| Motor: CRUD, filtros, índices, formato cifrado, snapshot, repair | ✅ |
+| Formato v2 paginado + page cache + `Compact` | ✅ |
+| Índices CSR persistidos | ✅ |
+| Find paralelo + backpressure + Update copy-on-write | ✅ |
+| RBAC embebido (usuarios/roles/sesiones/fieldDeny) | ✅ |
+| Hooks Go + triggers JSON declarativos | ✅ |
+| Grafos (edges, Traverse, ShortestPath) | ✅ |
+| **Wire protocol Mongo-compatible** (BSON, OP_MSG, CRUD, aggregate, SCRAM-SHA-256) | ✅ |
+| Consola web de administración + canvas de grafos (estilo phpMyAdmin + Neo4j Browser) | ⬜ M9 |
+
+## Documentación
+
+- 📖 **[Manual completo ES/EN](doc/manual/README.md)** — conexión, CRUD, joins, triggers, grafos, servidor · versión interactiva: [manual.html](doc/manual/manual.html)
+- 🏗️ [Arquitectura](doc/ARQUITECTURA.md) · 🗂️ [Distribución de archivos](doc/DISTRIBUCION_ARCHIVOS.md)
+- 🔌 [API Go completa](doc/API.md) · 🔍 [Lenguaje de consultas](doc/CONSULTAS.md)
+- 💾 [Formato del archivo](doc/FORMATO_ARCHIVO.md) · 🧪 [Pruebas y benchmarks](doc/PRUEBAS.md)
+- 📋 [Bitácora del plan (M0→M9)](doc/PLAN_V2.md)
+
 ---
 
-## Contribuciones
-
-Las contribuciones son bienvenidas. Si encuentras bugs o tienes sugerencias, por favor abre un issue o envía un pull request.
-
----
-
-## Licencia
-
-Este proyecto está bajo la licencia MIT. Ver el archivo [LICENSE](LICENSE) para más detalles.
+*MLStoreDB: documental como MongoDB, relacional-en-grafos como Neo4j, embebida como SQLite, cifrada como ninguna. Un archivo, todo tu mundo.*

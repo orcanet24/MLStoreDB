@@ -24,7 +24,7 @@ El motor ofrece CRUD estilo MongoDB, índices hash + ordenados con matriz CSR, c
 
 ## 2. Objetivo y alcance
 
-**Objetivo:** extraer del proyecto Mercado Libre un motor de almacenamiento standalone, independiente del dominio ML, con cifrado fuerte y API de base de datos documental en proceso.
+**Objetivo:** extraer del proyecto de origen un motor de almacenamiento standalone, independiente del dominio original, con cifrado fuerte y API de base de datos documental en proceso.
 
 **Dentro del alcance:**
 - Documentos JSON con `_id` string (ULID automático si falta)

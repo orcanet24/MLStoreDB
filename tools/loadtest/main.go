@@ -102,7 +102,7 @@ func main() {
 	const N = 10_000
 
 	// ── INSERT ──
-	fmt.Printf("\n2) INSERT %d docs (payload ML simulado)\n", N)
+	fmt.Printf("\n2) INSERT %d docs (payload CRM simulado)\n", N)
 	before := heapMB()
 	t := time.Now()
 	for i := 0; i < N; i++ {
@@ -295,7 +295,7 @@ func main() {
 	_ = s2.Close()
 
 	fmt.Println("\n════════════════════════════════════════════════════════")
-	fmt.Println(" RESUMEN (10k docs, payload ~real ML)")
+	fmt.Println(" RESUMEN (10k docs, payload ~real de CRM)")
 	fmt.Println("════════════════════════════════════════════════════════")
 	fmt.Printf("  Insert 10k     %s   %s\n", ms(dIns), usPer(N, dIns))
 	fmt.Printf("  Get x10k       %s   %s\n", ms(dGet), usPer(G, dGet))

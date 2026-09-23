@@ -4,13 +4,14 @@
 
 ```bash
 # suite completa (gate)
-go test ./db -count=1
+go test ./... -count=1
 
 # verbose
-go test ./db -count=1 -v
+go test ./db ./wire -count=1 -v
 
 # solo un archivo/área
 go test ./db -count=1 -run 'TestRange|TestCompound'
+go test ./wire -count=1 -run 'TestSCRAM|TestCursor'
 
 # benchmarks (1 iteración rápida)
 go test ./db -bench=. -benchtime=1x -run=XXX
@@ -30,9 +31,14 @@ go run ./tools/loadtest
 
 # smoke mínimo
 go run ./tools/smoke
+
+# servidor wire e2e (arrancar y conectar con mongosh/Compass)
+go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 ```
 
-**Resultado actual de referencia:** `go test ./db -count=1` → **ok** (~11 s) · **167 PASS / 0 FAIL** · `go vet` limpio · `scripts/test-race.ps1` → **race verde**.
+**Resultado actual de referencia:** `go test ./... -count=1` → **ok** ·
+**201 PASS / 0 FAIL** (motor 173 + wire 28) · `go vet` limpio ·
+`scripts/test-race.ps1` → **race verde (db + wire)**.
 
 > Nota: `-race` requiere `CGO_ENABLED=1` + toolchain C. En este entorno hay gcc (MSYS2, `C:\msys64\mingw64\bin\gcc.exe`); usar `powershell -File scripts/test-race.ps1` que setea `CGO_ENABLED=1` y resuelve el PATH automáticamente.
 
@@ -279,7 +285,7 @@ go test ./db -bench=. -benchtime=2s -run=XXX -count=3
 |---|---:|
 | Flush 10k (AES+zlib+rename) | ~4 s (1x) / ver loadtest |
 | Reopen 10k complejos | ~100 ms LightKDF (v2); ~0.8–2.5 s KDF prod (v1) |
-| Archivo 10k payload ML | ~6 MB en loadtest |
+| Archivo 10k payload CRM | ~6 MB en loadtest |
 
 ### 4.4 Lectura de resultados (cómo leer los números)
 

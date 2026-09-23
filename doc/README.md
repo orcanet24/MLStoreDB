@@ -1,18 +1,18 @@
 # proyecto_bd — Motor de base de datos multipropósito (JSON + índices + cifrado)
 
-Documentación completa del motor `mlstore` para **recrear un motor de BD propio, aislado del proyecto Mercado Libre**.
+Documentación completa del motor `mlstore` para **recrear un motor de BD propio, aislado del proyecto de origen**.
 
-Este directorio describe el motor tal como está hoy: arquitectura, distribución de archivos, formato binario, API, lenguaje de consulta, persistencia, pruebas y benchmarks. No depende de colecciones ni dominio ML: todo lo específico de Mercado Libre queda fuera.
+Este directorio describe el motor tal como está hoy: arquitectura, distribución de archivos, formato binario, API, lenguaje de consulta, persistencia, pruebas y benchmarks. No depende de colecciones ni dominio de negocio: todo lo específico del proyecto original queda fuera.
 
 | | |
 |---|---|
-| **Nombre interno** | `mlstore` (módulo `mlstoredb`, package `db`) |
+| **Nombre interno** | `mlstore` (módulo `mlstoredb`, packages `db` + `wire`) |
 | **Lenguaje** | Go 1.26 (CGO solo para `-race` en tests) |
-| **Tipo** | Document store embebido (estilo MongoDB) |
+| **Tipo** | Document store embebido (estilo MongoDB) + wire protocol Mongo |
 | **Persistencia** | 1 archivo cifrado, formato **v2** (log de records + AES-256-GCM + Argon2id) |
 | **Modelo** | Docs en RAM con page cache (budget `Options.CacheBytes`); snapshot cifrado |
-| **Tests** | **167 PASS / 0 FAIL** |
-| **Producción** | ~7.365 líneas · **Tests** ~5.136 líneas · **Total** 40 archivos `.go` en `db/` (+ `tools/`) |
+| **Tests** | **201 PASS / 0 FAIL** (173 motor + 28 wire) |
+| **Producción** | ~11.834 líneas (db 7.541 + wire 4.293) · **Tests** ~6.396 líneas · 52 archivos `.go` en packages (db 41 + wire 11) + `tools/` |
 
 ---
 
@@ -25,14 +25,16 @@ Este directorio describe el motor tal como está hoy: arquitectura, distribució
 5. [CONSULTAS](CONSULTAS.md) — filtros, índices, planner, sort, `Explain`
 6. [PRUEBAS](PRUEBAS.md) — suites, cobertura por área, cómo correrlas, benchmarks
 7. [RECREAR](RECREAR.md) — guía paso a paso para extraer el motor a un módulo propio
-8. [PLAN_V2](PLAN_V2.md) — bitácora del plan v2 (M0→M8): RBAC, hooks, triggers, grafo
+8. [PLAN_V2](PLAN_V2.md) — bitácora del plan v2 (M0→M9): RBAC, hooks, triggers, grafo, wire Mongo
+9. [MANUAL](manual/) — guía práctica por tema (ES/EN): conexión, CRUD, joins, triggers, grafos, servidor Mongo · [manual.html](manual/manual.html) interactivo
 
-**Estado v2:** plan M0–M7 cerrado — extracción a `package db`, formato v2 paginado +
+**Estado v2:** plan M0–M8 cerrado — extracción a `package db`, formato v2 paginado +
 page cache, `index_matrix` CSR persistida, Find paralelo + backpressure + Update COW,
 RBAC embebido (`Authenticate`→`Session`, `_users`/`_roles`), hooks Go, triggers
-JSON declarativos y grafo (`edges.<tipo>`, `Neighbors`/`Traverse`/`ShortestPath`).
-Estadísticas: **167 PASS / 0 FAIL**, 40 archivos `.go` en `db/` (prod 7.365 L ·
-tests 5.136 L), `-race` verde.
+JSON declarativos, grafo (`edges.<tipo>`, `Neighbors`/`Traverse`/`ShortestPath`) y
+**wire protocol Mongo-compatible** (`wire/`, `tools/mls-server` para Navicat/Compass/mongosh).
+Estadísticas: **201 PASS / 0 FAIL**, 51 archivos `.go` (db 7.541 L + wire 4.293 L ·
+tests 6.396 L), `-race` verde. M9 (consola web admin + canvas de grafos) pendiente.
 
 ---
 
@@ -51,10 +53,10 @@ tests 5.136 L), `-race` verde.
 - `FlushSync`/`SyncOnWrite` (durabilidad inmediata) + `Repair()` (H6)
 
 **No es:**
-- SQL, transacciones multi-colección, joins, aggregation pipelines
+- SQL, transacciones multi-colección, joins engine-side (ver patrones en el [manual](manual/es/06-joins.md))
 - Multi-proceso writer (un solo dueño del archivo)
 - WAL / ledger financiero (pérdida máxima ~2s en crash; `FlushSync`/`SyncOnWrite` para durabilidad inmediata)
-- ORM ni servidor de red (es embebido, in-process; el wire protocol Mongo es M8 pendiente)
+- ORM (es embebido, in-process; el servidor de red es `tools/mls-server`, wire Mongo subset)
 
 ---
 
@@ -132,6 +134,7 @@ Ver [RECREAR.md](RECREAR.md) para extraer a módulo independiente.
 | M5b Triggers JSON declarativos | ✅ |
 | M6 Grafo (`edges.*`, Neighbors/Traverse/ShortestPath) | ✅ |
 | M7 Docs + benchmarks + race final | ✅ |
-| M8 Wire protocol Mongo-compatible | ⬜ pendiente de aprobación |
+| M8 Wire protocol Mongo-compatible (`wire/`, `mls-server`) | ✅ |
+| M9 Consola web: admin + canvas de grafos | ⬜ pendiente de aprobación |
 
 Docs de motor: `doc/*`, bitácora `doc/PLAN_V2.md`, `scripts/test-race.ps1` (`-race` con CGO+gcc MSYS2).

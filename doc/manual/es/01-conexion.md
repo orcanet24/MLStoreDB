@@ -82,9 +82,9 @@ docs, _ := sess.Find("orders", db.Document{"status": "PAID"}, nil)
 Arranca el servidor wire:
 
 ```bash
-go run ./tools/mls-server -addr 127.0.0.1:27017 -path datos.mlstore \
+go run ./tools/mls-server -addr 127.0.0.1:28917 -path datos.mlstore \
     -key "mi-clave-maestra-de-32-bytes!!" -db midb
 ```
 
-Y conéctate con `mongodb://127.0.0.1:27017`. Detalle completo en
+Y conéctate con `mongodb://127.0.0.1:28917`. Detalle completo en
 [09-servidor-mongo.md](09-servidor-mongo.md).

@@ -1,6 +1,6 @@
 # Recrear el motor como proyecto aislado (multipropósito)
 
-Guía para extraer `mlstore` del repo origen y tener un **módulo de BD propio**, sin dependencias de Mercado Libre.
+Guía para extraer `mlstore` del repo origen y tener un **módulo de BD propio**, sin dependencias del proyecto original.
 
 > **Estado:** la extracción ya está hecha en este repo — módulo `mlstoredb`,
 > package `db`, tools en `tools/`. Esta guía queda como checklist de referencia.
@@ -11,13 +11,13 @@ Guía para extraer `mlstore` del repo origen y tener un **módulo de BD propio**
 
 | Dejar fuera | Motivo |
 |---|---|
-| Colecciones `ml_*`, `product_slots`, … | dominio ML |
+| Colecciones `ml_*`, `product_slots`, … | dominio de origen |
 | `cmd/mld` con questions de ML | es smoke del producto (aquí: `tools/smoke`) |
 | Docs de PLAN_MAESTRO / informes ML | producto, no motor |
 | Lógica free/full, licencias, OAuth | capa de negocio |
 | Cualquier import de `internal/ml` o `internal/services` | el motor no los tiene hoy (verificar al extraer) |
 
-El package `db` **hoy no importa nada del dominio ML**. Solo trae `Document`, `Store`, etc.  
+El package `db` **hoy no importa nada del dominio de origen**. Solo trae `Document`, `Store`, etc.  
 El único “nombre ML” residual es el prefijo histórico en textos/docs y magic `MLDB` — renombrables (ver §5).
 
 ---
@@ -108,7 +108,7 @@ go run ./tools/smoke
 go run ./tools/loadtest
 ```
 
-Gate: **167 tests en verde** + smoke + loadtest + `scripts/test-race.ps1`.
+Gate: **201 tests en verde** + smoke + loadtest + `scripts/test-race.ps1` (db + wire).
 
 ---
 
@@ -238,7 +238,7 @@ Priorizadas por valor general:
 5. ~~RBAC embebido~~ → **hecho (M4)**.
 6. ~~Hooks Go + triggers JSON~~ → **hecho (M5a/M5b)**.
 7. ~~Grafo edges/Traverse/ShortestPath~~ → **hecho (M6)**.
-8. **Wire protocol Mongo-compatible (OP_MSG)** — M8, pendiente de aprobación.
+8. ~~**Wire protocol Mongo-compatible (OP_MSG)** — M8~~ ✅ completado: package `wire/` (BSON, OP_MSG/OP_QUERY, CRUD, aggregate, SCRAM) + `tools/mls-server` + manual `doc/manual/` (ES/EN + HTML).
 9. **Índices textuales** — `$text` / prefix search más allá de `ord` de string.
 10. **TTL helper** — job que borra docs por `expires_at` (la app ya puede).
 11. **WAL opcional** si hay caso financiero.
@@ -260,4 +260,4 @@ go run ./tools/smoke
 go run ./tools/loadtest
 ```
 
-Cuando todo pase: el motor está **listo como dependencia de cualquier app Go**, sin Mercado Libre.
+Cuando todo pase: el motor está **listo como dependencia de cualquier app Go**, sin ataduras al proyecto de origen.

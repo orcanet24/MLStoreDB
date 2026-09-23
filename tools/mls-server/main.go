@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:27017", "listen address (host:port)")
+	addr := flag.String("addr", "127.0.0.1:28917", "listen address (host:port)")
 	path := flag.String("path", "", "database file (.mlstore); empty = in-memory")
 	dbName := flag.String("db", "", "database name exposed to clients (default: file base name or mlstoredb)")
 	key := flag.String("key", "", "master key (KEK input; required for encrypted files)")

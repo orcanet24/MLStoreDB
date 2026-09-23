@@ -8,22 +8,22 @@ Navicat, Compass or mongosh without writing code.
 
 ```bash
 # in-memory (quick testing)
-go run ./tools/mls-server -addr 127.0.0.1:27017 -db demo
+go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 
 # encrypted file
-go run ./tools/mls-server -addr 127.0.0.1:27017 \
+go run ./tools/mls-server -addr 127.0.0.1:28917 \
     -path data.mlstore \
     -key "my-32-bytes-long-master-key!!" \
     -db mydb
 
 # with SCRAM-SHA-256 authentication (optional)
-go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
+go run ./tools/mls-server -addr 127.0.0.1:28917 -path data.mlstore \
     -key "my-key" -db mydb -user admin -pass secret
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `-addr` | `127.0.0.1:27017` | Listen address |
+| `-addr` | `127.0.0.1:28917` | Listen address (MLStoreDB's own port; no clash with a real MongoDB on 27017) |
 | `-path` | *(memory)* | `.mlstore` file |
 | `-db` | file name | Database name clients see |
 | `-key` | — | Master key (required for encrypted files) |
@@ -35,10 +35,10 @@ go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
 
 | Client | Connection string / settings |
 |---|---|
-| mongosh | `mongosh mongodb://127.0.0.1:27017` |
-| Compass | `mongodb://127.0.0.1:27017` |
-| Navicat | Host `127.0.0.1`, port `27017`, no authentication |
-| With auth | `mongodb://admin:secret@127.0.0.1:27017` |
+| mongosh | `mongosh mongodb://127.0.0.1:28917` |
+| Compass | `mongodb://127.0.0.1:28917` |
+| Navicat | Host `127.0.0.1`, port `28917`, no authentication |
+| With auth | `mongodb://admin:secret@127.0.0.1:28917` |
 
 > Data model: the server exposes **one database** (the `-db` flag)
 > containing every collection in the store. Commands are accepted on
@@ -79,7 +79,7 @@ go run ./tools/mls-server -addr 127.0.0.1:27017 -path data.mlstore \
 ## Full session example (mongosh)
 
 ```javascript
-// connect: mongosh mongodb://127.0.0.1:27017
+// connect: mongosh mongodb://127.0.0.1:28917
 use mydb
 
 db.createCollection("customers")

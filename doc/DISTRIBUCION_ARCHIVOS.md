@@ -5,24 +5,31 @@
 ```
 mlstoredb/                   # module mlstoredb (go 1.26.5)
 ├── go.mod / go.sum
-├── db/                      # ← EL MOTOR (40 archivos .go: 21 prod + 19 test)
+├── db/                      # ← EL MOTOR (41 archivos .go: 21 prod + 20 test)
 │   ├── ... (ver árbol abajo)
+├── wire/                    # ← M8: wire protocol Mongo (11 archivos: 10 prod + 1 test)
+│   ├── bson.go · msg.go · cursor.go · server.go · handshake.go
+│   ├── commands.go · query.go · update.go · agg.go · scram.go
+│   └── wire_test.go
 ├── tools/
 │   ├── smoke/main.go        # smoke: open → index → insert → find → close
-│   └── loadtest/main.go     # prueba de carga 10k (disco + cifrado)
+│   ├── loadtest/main.go     # prueba de carga 10k (disco + cifrado)
+│   └── mls-server/main.go   # M8: servidor Mongo-compatible (CLI)
 ├── scripts/
-│   └── test-race.ps1        # -race con CGO + gcc MSYS2
+│   └── test-race.ps1        # -race con CGO + gcc MSYS2 (db + wire)
 └── doc/                     # ← ESTA documentación (aislada de ML)
     ├── README.md · ARQUITECTURA.md · API.md · CONSULTAS.md
     ├── FORMATO_ARCHIVO.md · PRUEBAS.md · RECREAR.md
-    └── PLAN_V2.md           # bitácora plan v2 (M0→M8)
+    ├── PLAN_V2.md           # bitácora plan v2 (M0→M9)
+    └── manual/              # M8: manual de usuario ES/EN + manual.html
+        ├── es/ (9 temas) · en/ (9 temas) · README.md · manual.html
 ```
 
 ---
 
 ## 2. Mapa del package `db`
 
-### 2.1 Producción (21 archivos, ~7.365 líneas)
+### 2.1 Producción (21 archivos, ~7.541 líneas)
 
 | Archivo | Líneas | Responsabilidad |
 |---|---:|---|
@@ -43,13 +50,13 @@ mlstoredb/                   # module mlstoredb (go 1.26.5)
 | **parallel.go** | 85 | `materializeRefs` paralelo (Find/Count) |
 | **runtime.go** | 95 | flock, Snapshot, auto-flush ticker, `OpenWithLock` |
 | **filter_regex.go** | 49 | compileCached + applyRegex |
-| **errors.go** | 15 | Sentinels (incl. `ErrUnauthorized`/`ErrForbidden`/`ErrHookCycle`/`ErrHookDepth`) |
+| **errors.go** | 17 | Sentinels (incl. `ErrUnauthorized`/`ErrForbidden`/`ErrHookCycle`/`ErrHookDepth`/`ErrExists`) |
 | **machine_windows.go** | 17 | MachineGuid (build tag windows) |
 | **machine_nonwindows.go** | 7 | fallback "" (build tag !windows) |
 | **zlib_helpers.go** | 21 | zlib writer/reader + crypto/rand |
-| **Producción** | **~7365** | |
+| **Producción** | **~7541** | |
 
-### 2.2 Tests (19 archivos, ~5.136 líneas) — 167 PASS
+### 2.2 Tests (20 archivos, ~5.366 líneas) — 173 PASS
 
 | Archivo | Líneas | Tests | Cubre |
 |---|---:|---:|---|
@@ -71,10 +78,36 @@ mlstoredb/                   # module mlstoredb (go 1.26.5)
 | hooks_test.go | 373 | 13 | M5a: before/after, async FIFO, depth/ciclo, bypass |
 | triggers_test.go | 322 | 11 | M5b: actions, templates, reopen, async |
 | graph_test.go | 322 | 8 | M6: Neighbors/Traverse/Path, invalidación, RBAC grafo |
+| colladmin_test.go | 195 | 6 | M8: UpdateFields, Create/DropCollection, no-resurrección, Session admin |
 | bench_test.go | 326 | 3+11 | límites 1MB + benchmarks |
-| **Tests** | **~5136** | **167** | |
+| **Tests** | **~5366** | **173** | |
 
-**Total motor: 40 archivos · ~12.501 líneas**
+**Total motor: 41 archivos · ~12.907 líneas**
+
+### 2.3 Package `wire` (M8) — 11 archivos
+
+**Producción (10 archivos, ~4.293 líneas):**
+
+| Archivo | Líneas | Responsabilidad |
+|---|---:|---|
+| **bson.go** | 740 | Codec BSON↔Document, extended-JSON ($oid/$date/$binary/$numberLong), claves ordenadas |
+| **commands.go** | 700 | insert/find/getMore/killCursors/count/distinct/update/delete/findAndModify, proyecciones, batching |
+| **update.go** | 583 | Operadores de update Mongo ($set/$unset/$inc/$push/$pull/…) → diff patch/remove |
+| **server.go** | 503 | Server/Serve/Close, dispatch, resolución de comando, mapeo errores→códigos Mongo |
+| **agg.go** | 434 | aggregate: $match/$sort/$skip/$limit/$count/$group/$unwind/$project/$lookup |
+| **handshake.go** | 392 | hello/isMaster/ping/buildInfo + admin (listCollections/indexes/stats/create/drop) |
+| **msg.go** | 351 | Framing OP_MSG/OP_QUERY/OP_REPLY/OP_GET_MORE/OP_KILL_CURSORS + checksum CRC32-C |
+| **query.go** | 298 | Traducción filtro Mongo→motor, regex, normalización _id |
+| **scram.go** | 210 | SCRAM-SHA-256 server → sesión engine |
+| **cursor.go** | 82 | Registro de cursores con TTL |
+
+**Tests (1 archivo, ~1.030 líneas) — 28 PASS:** `wire_test.go` — BSON
+roundtrip, handshake OP_MSG/legado, CRUD completo, cursores, aggregate,
+índices admin, errores/writeErrors, proyecciones, find legado + getMore,
+secuencias kind-1, checksum, SCRAM ok/fail, RBAC, edges por wire.
+
+**Total wire: 11 archivos · ~5.323 líneas**
+**Total módulo: 52 archivos .go en packages · ~18.230 líneas (+ tools/)**
 
 ---
 

@@ -39,8 +39,8 @@ gates en verde; no se avanza a la siguiente con fases abiertas.
 | M5b Triggers declarativos | ✅ | `go build` · `go vet` · 159 PASS / 0 FAIL (11 nuevos triggers) · smoke OK · loadtest PASS · `-race` verde |
 | M6 Grafo (edges + traverse) | ✅ | `go build` · `go vet` · 167 PASS / 0 FAIL (8 nuevos graph) · smoke OK · loadtest PASS · `-race` verde |
 | M7 Docs + benchmarks + race final | ✅ | `go build` · `go vet` · 167 PASS / 0 FAIL · smoke OK · loadtest PASS · benchmarks 11 OK · `-race` verde · docs `doc/*` actualizados |
-| M8 (post-plano) Wire protocol Mongo-compatible | ⬜ pendiente de aprobación | |
-| M9 (post-plano) Cliente web de visualización de grafos (estilo Neo4j Browser) | ⬜ pendiente de aprobación | |
+| M8 Wire protocol Mongo-compatible | ✅ | `go build` · `go vet` · 201 PASS / 0 FAIL (28 nuevos wire + 6 motor) · smoke OK · loadtest PASS · `-race` verde (db+wire) · e2e mls-server OK · manual ES/EN |
+| M9 (post-plano) Consola web: administración + grafos (phpMyAdmin + Neo4j Browser) | ⬜ pendiente de aprobación | |
 
 ---
 
@@ -547,23 +547,122 @@ completa + race.
 
 ---
 
-## M9 — Cliente web de visualización de grafos (pendiente)
+## M9 — Consola web: administración + grafos (pendiente)
 
-**Idea:** un cliente web similar al Neo4j Browser que permita visualizar y
-explorar los grafos de MLStoreDB (`edges.<tipo>`, `Neighbors`, `Traverse`,
-`ShortestPath`) desde el navegador, para explotar todo el poder de la BD
-sin escribir código Go.
+**Idea:** una consola web profesional embebida que combine lo mejor de
+**phpMyAdmin** (administrar la BD completa desde el navegador) y del
+**Neo4j Browser** (explorar y construir grafos en un canvas interactivo),
+sin escribir una línea de Go.
 
-**Alcance previsto:**
+**Alcance previsto — consola de administración (estilo phpMyAdmin):**
 
-- UI web con renderizado interactivo del grafo (nodos = documentos,
-  aristas = `edges.<tipo>` con `_from`/`_to`).
-- Exploración incremental: expandir vecinos de un vértice, recorridos BFS
-  (`Traverse`) y rutas más cortas (`ShortestPath`) visualizadas.
-- Consultas documentales en la misma UI (colecciones, filtros, índices).
-- Autenticación vía RBAC existente (`Authenticate` → `Session`).
+- Colecciones: listar, crear, borrar, ver/crear índices.
+- Documentos: explorar con paginación/filtros/sort, editor JSON, CRUD
+  completo, export CSV.
+- Seguridad RBAC (M4): usuarios, roles, permisos y `fieldDeny` gestionables
+  desde la UI.
+- Triggers (M5b): listar, crear, editar, habilitar/deshabilitar.
+- Stats del motor: `CacheStats`, counts, tamaño de archivo, sesiones.
 
-**Dependencia:** requiere servidor de red (M8) o un servidor HTTP propio
-que exponga la API del `Store` al navegador.
+**Alcance previsto — canvas de grafos (estilo Neo4j Browser):**
 
-**Registrado:** 2026-09-23, a pedido del usuario.
+- Nodos = documentos, aristas = `edges.<tipo>`; render interactivo con
+  drag, zoom y pan.
+- **Crear conexiones arrastrando** de un nodo a otro en el canvas →
+  `AddEdge` (tipo + props en el momento).
+- Exploración incremental: expandir vecinos (`Neighbors`), recorridos BFS
+  (`Traverse`) y rutas más cortas (`ShortestPath`) resaltados en el grafo.
+- **Agrupación visual de grafos**: por colección, tipo de arista o
+  propiedad (clusters/fold).
+- Panel de consultas: consultas documentales y de grafo con resultados
+  como tabla **o** como grafo.
+
+**Decisiones técnicas previstas (se cierran al arrancar M9):**
+
+- Servidor HTTP propio embebido en Go (no depende del wire protocol M8;
+  pueden convivir en el mismo binario).
+- UI servida como assets estáticos embebidos en el binario (sin build de
+  node, sin CDN externo).
+- Auth vía RBAC existente (`Authenticate` → `Session`, cookie/token).
+
+**Dependencia:** ninguna dura de M8; se ejecuta tras cerrar M8 para no
+abrir dos frentes de red simultáneos.
+
+**Registrado:** 2026-09-23 (visión ampliada a pedido del usuario:
+administrar la BD + CRUD + agrupar grafos + canvas de conexiones).
+
+---
+
+## M8 — Wire protocol Mongo-compatible (completado)
+
+**Idea:** servidor TCP que habla el wire protocol de MongoDB (subset
+`OP_MSG` + legado `OP_QUERY`/`OP_REPLY`/`OP_GET_MORE`/`OP_KILL_CURSORS`)
+para conectar Navicat, Compass o mongosh sin escribir código Go.
+
+**Paquete `wire/` (10 archivos, 4.293 L prod + 1.030 L test):**
+
+| Archivo | Contenido |
+|---|---|
+| `bson.go` | Codec BSON↔`Document` con extended-JSON (`$oid`, `$date`, `$binary`, `$numberLong`, `$regex`, min/maxKey); enteros → int32/int64/double preservando el type byte; decode con claves ordenadas |
+| `msg.go` | Framing: header 16B, OP_MSG (secciones kind 0/1, checksum CRC32-C, moreToCome), OP_QUERY (`$cmd` + find legado), OP_REPLY, OP_GET_MORE, OP_KILL_CURSORS |
+| `cursor.go` | Registro de cursores con TTL 10 min, batch y kill |
+| `server.go` | `Server`/`Serve`/`Close`, loop por conexión, dispatch, resolución de comando por primer nombre conocido, mapeo de errores → códigos Mongo |
+| `handshake.go` | hello/isMaster/ping/buildInfo/getLog/connectionStatus/whatsmyuri/serverStatus/startSession + listDatabases/listCollections/create/drop/createIndexes/listIndexes/dropIndexes/dbStats/collStats |
+| `commands.go` | insert/find/getMore/killCursors/count/countDocuments/estimatedDocumentCount/distinct/update/delete/findAndModify; proyecciones include/exclude; batching con tope 16MB |
+| `query.go` | Traducción filtro Mongo→motor (regex BSON→`$regex`, normalización `_id` ObjectId/número→string, operadores no soportados → BadValue) |
+| `update.go` | Operadores `$set $unset $inc $mul $min $max $rename $push $addToSet $pop $pull $pullAll $currentDate $setOnInsert` + reemplazo → diff patch/remove |
+| `agg.go` | aggregate: `$match $sort $skip $limit $count $group $unwind $project $lookup` (estado por grupo, accumuladores $sum/$avg/$min/$max/$count/$first/$last/$push/$addToSet) |
+| `scram.go` | SCRAM-SHA-256 server (PBKDF2 15000, verificación de prueba, v= signature, skipEmptyExchange) → sesión engine si RBAC activo |
+
+**Adiciones al motor (M8):**
+
+- `Store.UpdateFields`/`Session.UpdateFields` (patch + remove[] explícito;
+  los before-hooks ven la forma final) — base de `$unset`/replace del wire.
+- `Store.CreateCollection`/`DropCollection` (+ Session): create persiste
+  en META aunque vacía; drop pasa cada doc por el delete path normal y
+  **el scan v2 queda META-gated** (DOC/IDX de colecciones ausentes del
+  último META se ignoran → nada resucita al reabrir).
+- Session admin: `EnsureIndex`/`DropIndex`/`ListIndexes`/`Collections`
+  con chequeos RBAC correspondientes.
+- Nuevo sentinel `ErrExists` (→ code 48 NamespaceExists).
+
+**Herramientas:**
+
+- `tools/mls-server`: CLI (`-addr -path -key -db -user -pass -machine
+  -light-kdf`) con shutdown por señal; expone **una** base de datos con
+  todas las colecciones del store.
+- `scripts/test-race.ps1` ahora cubre `./db/ ./wire/`.
+
+**Manual de usuario (`doc/manual/`):** 9 temas × 2 idiomas (ES/EN) en
+`.md` + `manual.html` interactivo con pestañas y selector de idioma —
+conexión, insert, select, update, delete, **joins (4 patrones para JSON
+anidado entre colecciones)**, triggers, grafos y servidor Mongo.
+
+**Tests:** `wire/wire_test.go` (28): BSON roundtrip + number encoding ·
+handshake OP_MSG y legado · insert/find roundtrip (ObjectId→hex) ·
+filtros/sort/skip/limit · cursores (batch 101/getMore/kill) ·
+count/distinct · update operators ($set/$unset/$inc/$push/$pull) +
+replace + upsert/multi · delete/findAndModify · aggregate ($group/$unwind/
+$lookup) · índices admin (unique 11000) · create/drop/listCollections ·
+stats · errores (CommandNotFound/writeErrors ordered-unordered) ·
+proyecciones · find legado + OP_GET_MORE · secuencias kind-1 · checksum
+OP_MSG · SCRAM (ok + password incorrecto) · RBAC engine sin wire-auth ·
+edges por wire. Motor: `db/colladmin_test.go` (6): UpdateFields (+hooks),
+CreateCollection, DropCollection, **persistencia de drop sin resurrección**,
+Session admin.
+
+**Limitaciones documentadas:** `_id` no-string se normaliza a string;
+números BSON con semántica JSON (5 == 5.0); sort multi-clave en orden
+alfabético de campos; sin `$elemMatch/$size/$type/$mod/$all/$expr`, sin
+proyecciones punteadas, sin compresión OP_COMPRESSED; sin pipeline
+updates; `maxBsonObjectSize` = 1 MB.
+
+**Gates M8:**
+
+- `go build ./...` ✅
+- `go vet ./...` ✅
+- `go test ./... -count=1` → **201 PASS / 0 FAIL** ✅
+- `go run ./tools/smoke` → `smoke OK: Ana` ✅
+- `go run ./tools/loadtest` → PASS end-to-end ✅
+- `powershell -File scripts/test-race.ps1` → **ok (db + wire)** ✅
+- e2e `mls-server` por TCP real (hello + ping) ✅
