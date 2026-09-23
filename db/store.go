@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -501,11 +502,22 @@ func (s *Store) Update(coll string, id string, patch Document) error {
 	return s.afterMutation()
 }
 
-func (s *Store) updateDoc(sess *Session, coll string, id string, patch Document) error {
-	return s.updateDocFrame(nil, sess, coll, id, patch)
+// UpdateFields is Update plus explicit top-level field removals (M8 wire:
+// Mongo $unset / replacement diffs). Removals are applied to the merged
+// preview before hooks run (hooks see the final shape) and land in the same
+// updateApply path, so triggers/async hooks behave exactly like an Update.
+func (s *Store) UpdateFields(coll string, id string, patch Document, remove []string) error {
+	if err := s.updateDocFrame(nil, nil, coll, id, patch, remove); err != nil {
+		return err
+	}
+	return s.afterMutation()
 }
 
-func (s *Store) updateDocFrame(frame *hookFrame, sess *Session, coll string, id string, patch Document) error {
+func (s *Store) updateDoc(sess *Session, coll string, id string, patch Document) error {
+	return s.updateDocFrame(nil, sess, coll, id, patch, nil)
+}
+
+func (s *Store) updateDocFrame(frame *hookFrame, sess *Session, coll string, id string, patch Document, preRemove []string) error {
 	var old Document
 	var remove []string
 	if before := s.matchHooks(BeforeUpdate, coll); len(before) > 0 {
@@ -526,6 +538,11 @@ func (s *Store) updateDocFrame(frame *hookFrame, sess *Session, coll string, id 
 			}
 			merged[k] = cloneValue(v)
 		}
+		for _, k := range preRemove {
+			if k != "_id" {
+				delete(merged, k)
+			}
+		}
 		if err := s.runBeforeHooks(frame, before, BeforeUpdate, coll, id, merged, old); err != nil {
 			return err
 		}
@@ -544,6 +561,12 @@ func (s *Store) updateDocFrame(frame *hookFrame, sess *Session, coll string, id 
 				continue
 			}
 			if _, ok := merged[k]; !ok {
+				remove = append(remove, k)
+			}
+		}
+	} else if len(preRemove) > 0 {
+		for _, k := range preRemove {
+			if k != "_id" {
 				remove = append(remove, k)
 			}
 		}
@@ -1409,6 +1432,83 @@ func (s *Store) SchemaVersion() uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.schemaVersion
+}
+
+// CreateCollection registers an empty collection (M8 wire). It survives
+// flush/reopen via the META record even with no documents. Returns
+// ErrExists when the collection is already present.
+func (s *Store) CreateCollection(coll string) error {
+	return s.createCollection(nil, coll)
+}
+
+func (s *Store) createCollection(sess *Session, coll string) error {
+	if coll == "" || strings.HasPrefix(coll, "$") || strings.ContainsRune(coll, 0) {
+		return ErrForbidden
+	}
+	if isSystemColl(coll) {
+		return ErrForbidden
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.checkWriteLocked(sess, coll); err != nil {
+		return err
+	}
+	if _, ok := s.collections[coll]; ok {
+		return ErrExists
+	}
+	s.collections[coll] = &collection{entries: map[string]*docEntry{}}
+	s.markDirty()
+	return nil
+}
+
+// DropCollection removes a collection and all its documents (M8 wire).
+// Every document goes through the normal delete path (DEL records, hooks,
+// cache eviction); afterwards the collection definition leaves the map and
+// the next flush META stops listing it. Stale DOC/IDX records from earlier
+// commits are ignored on reopen (the v2 scan is META-gated). Hooks may veto
+// individual deletes, leaving a partially dropped collection.
+func (s *Store) DropCollection(coll string) error {
+	return s.dropCollection(nil, coll)
+}
+
+func (s *Store) dropCollection(sess *Session, coll string) error {
+	if coll == "" || isSystemColl(coll) {
+		return ErrForbidden
+	}
+	if err := s.previewWrite(sess, coll); err != nil {
+		return err
+	}
+	s.mu.RLock()
+	var ids []string
+	if c, ok := s.collections[coll]; ok {
+		ids = make([]string, 0, len(c.entries))
+		for id := range c.entries {
+			ids = append(ids, id)
+		}
+	} else {
+		s.mu.RUnlock()
+		return ErrNotFound
+	}
+	s.mu.RUnlock()
+	sort.Strings(ids)
+	for _, id := range ids {
+		if err := s.deleteDoc(sess, coll, id); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	if c, ok := s.collections[coll]; ok {
+		s.purgeCollCacheLocked(c)
+		delete(s.collections, coll)
+		s.markDirty()
+	}
+	s.mu.Unlock()
+	if isEdgeColl(coll) {
+		s.graphMu.Lock()
+		s.graphEpoch.Add(1)
+		s.graphMu.Unlock()
+	}
+	return s.afterMutation()
 }
 
 // matchEqual removed — superseded by match() in filter.go (M2).

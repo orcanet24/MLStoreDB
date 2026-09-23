@@ -257,6 +257,65 @@ func (sess *Session) Update(coll string, id string, patch Document) error {
 	return sess.store.afterMutation()
 }
 
+// UpdateFields is Store.UpdateFields with write permission (M8 wire).
+func (sess *Session) UpdateFields(coll string, id string, patch Document, remove []string) error {
+	if err := sess.store.updateDocFrame(nil, sess, coll, id, patch, remove); err != nil {
+		return err
+	}
+	return sess.store.afterMutation()
+}
+
+// EnsureIndex is Store.EnsureIndex with write permission on coll (M8 wire).
+func (sess *Session) EnsureIndex(coll string, fields []string, unique bool) error {
+	if err := sess.store.previewWrite(sess, coll); err != nil {
+		return err
+	}
+	return sess.store.EnsureIndex(coll, fields, unique)
+}
+
+// DropIndex is Store.DropIndex with write permission on coll (M8 wire).
+func (sess *Session) DropIndex(coll string, fields []string) error {
+	if err := sess.store.previewWrite(sess, coll); err != nil {
+		return err
+	}
+	return sess.store.DropIndex(coll, fields)
+}
+
+// ListIndexes is Store.ListIndexes with read permission on coll (M8 wire).
+func (sess *Session) ListIndexes(coll string) ([]IndexInfo, error) {
+	sess.store.mu.RLock()
+	err := sess.store.checkReadLocked(sess, coll)
+	sess.store.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	return sess.store.ListIndexes(coll)
+}
+
+// Collections is Store.Collections filtered by read permission (M8 wire).
+func (sess *Session) Collections() []string {
+	var out []string
+	for _, c := range sess.store.Collections() {
+		if isSystemColl(c) {
+			continue
+		}
+		if sess.canRead(c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// CreateCollection is Store.CreateCollection with write permission (M8 wire).
+func (sess *Session) CreateCollection(coll string) error {
+	return sess.store.createCollection(sess, coll)
+}
+
+// DropCollection is Store.DropCollection with write permission (M8 wire).
+func (sess *Session) DropCollection(coll string) error {
+	return sess.store.dropCollection(sess, coll)
+}
+
 // Delete is Store.Delete with write permission.
 func (sess *Session) Delete(coll string, id string) error {
 	if err := sess.store.deleteDoc(sess, coll, id); err != nil {

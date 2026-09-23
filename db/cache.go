@@ -176,6 +176,24 @@ func (s *Store) evictLocked() {
 	}
 }
 
+// purgeCollCacheLocked removes every entry of c from the resident registry.
+// Caller must hold Store.mu (write) — takes cacheMu inside (s.mu → cacheMu).
+func (s *Store) purgeCollCacheLocked(c *collection) {
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	for _, e := range c.entries {
+		if _, ok := s.cache[e]; ok {
+			if n := e.size.Load(); n > 0 {
+				s.residentBytes -= n
+				if s.residentBytes < 0 {
+					s.residentBytes = 0
+				}
+			}
+			delete(s.cache, e)
+		}
+	}
+}
+
 // evictEntryLocked clears the resident payload. Caller holds cacheMu.
 func (s *Store) evictEntryLocked(e *docEntry) {
 	if e.dirty.Load() {

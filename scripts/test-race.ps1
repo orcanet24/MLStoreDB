@@ -31,5 +31,5 @@ $gccDir = Split-Path -Parent $cc
 $env:PATH = "$gccDir;$env:PATH"
 
 Write-Host "CC=$env:CC CGO_ENABLED=$env:CGO_ENABLED"
-& go test ./db/ -race -count=1 @GoTestArgs
+& go test ./db/ ./wire/ -race -count=1 @GoTestArgs
 exit $LASTEXITCODE

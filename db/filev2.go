@@ -955,6 +955,11 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 
 	// Attach IDX payloads to collections (structure mismatch → eager already checked defs).
 	for coll, list := range res.idxByColl {
+		if res.meta != nil {
+			if _, ok := res.meta.Collections[coll]; !ok {
+				continue // dropped after an earlier flush (M8 DropCollection)
+			}
+		}
 		c := getColl(coll)
 		for _, p := range list {
 			// Find matching def index or create.
@@ -1015,8 +1020,14 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 
 	// Index defs without IDX payload → eager (handled above via idxSeen check).
 
-	// Doc entries (cold).
+	// Doc entries (cold). META-gated: records for collections absent from
+	// the last META belong to dropped collections (M8 DropCollection).
 	for _, d := range res.docs {
+		if res.meta != nil {
+			if _, ok := res.meta.Collections[d.coll]; !ok {
+				continue
+			}
+		}
 		c := getColl(d.coll)
 		e := newDocEntry(nil) // cold
 		e.recOff.Store(d.off)

@@ -65,7 +65,7 @@ func (h *HookContext) Upsert(coll string, id string, doc Document) error {
 }
 
 func (h *HookContext) Update(coll string, id string, patch Document) error {
-	return h.store.updateDocFrame(h.frame, hookBypass, coll, id, patch)
+	return h.store.updateDocFrame(h.frame, hookBypass, coll, id, patch, nil)
 }
 
 func (h *HookContext) Delete(coll string, id string) error {

@@ -14,4 +14,5 @@ var (
 	ErrForbidden    = errors.New("db: forbidden")
 	ErrHookCycle    = errors.New("db: hook cycle detected")
 	ErrHookDepth    = errors.New("db: hook depth limit exceeded")
+	ErrExists       = errors.New("db: collection already exists")
 )
