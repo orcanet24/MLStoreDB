@@ -1,27 +1,35 @@
-# MLStoreDB
+# MLStoreDB — Memory-Log Store Database
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-201%20PASS%20%2F%200%20FAIL-brightgreen)
+![Tests](https://img.shields.io/badge/tests-225%20PASS%20%2F%200%20FAIL-brightgreen)
 ![Race](https://img.shields.io/badge/-race-green)
 ![Licencia](https://img.shields.io/badge/tipo-embebida%20%2B%20servidor-blue)
 
-> **Un archivo cifrado. Documentos JSON. Grafos nativos. Triggers. Y se conecta con tus herramientas de MongoDB favoritas — sin ser MongoDB.**
+> **Un archivo cifrado. Índices en memoria. Log append-only. Grafos nativos. Triggers. Y se conecta con tus herramientas de MongoDB favoritas — sin ser MongoDB.**
 
 ---
 
 ## La historia
 
-MLStoreDB no nació en un laboratorio. Nació de un problema real: un **CRM con datos 100% JSON**.
+MLStoreDB nació de un problema real: un CRM donde **todo era JSON** — órdenes, compradores, envíos, items con estructuras anidadas e impredecibles. Forzar eso a tablas relacionales era pelear contra la naturaleza de los datos.
 
-Al construirlo nos dimos cuenta de algo: órdenes, compradores, envíos, items con estructuras anidadas e impredecibles — **todo era JSON**. Forzarlo a tablas relacionales era pelear contra la naturaleza de los datos. La respuesta obvia era acceso directo al JSON, al estilo MongoDB.
+La solución obvia era acceso directo al JSON, al estilo MongoDB. Pero entonces pensamos: **¿y si vamos más lejos?**
 
-Pero entonces pensamos: **¿y si vamos más lejos?**
+Dos decisiones de arquitectura definieron el motor — y el nombre:
+
+- **Memory (Memoria):** los índices no se consultan desde disco. Se pre-computan como matrices CSR que viven en RAM y se cargan en microsegundos. Las búsquedas equality/$in resuelven en O(1) sin tocar disco. Los documentos calientes viven en un page cache con presupuesto configurable. El grafo completo (adyacencia CSR) vive en memoria.
+
+- **Log:** no hay UPDATE in-place. Los registros de datos van a un log append-only cifrado con COMMIT atómico como único punto de consistencia. Sin WAL, sin fragmentación, self-heal ante torn-writes. Rápido para escribir, rápido para leer, simple para razonar.
+
+**ML = Memory + Log.** Dos palabras que describen exactamente cómo funciona: índices en memoria, datos en log cifrado.
+
+Pero además:
 
 - Un vendedor conecta con compradores, que conectan con órdenes… eso es un **grafo**. ¿Por qué no tenerlo nativo, como Neo4j, sin otra base de datos más?
 - Cuando entra una orden pagada queremos auditar, contar, notificar… eso son **triggers**. ¿Por qué no declararlos en JSON y que vivan dentro de la BD?
 - Los datos son sensibles. ¿Por qué cifrar es un extra y no el **default**?
 
-El resultado: una base de datos documental **simple, cifrada y de alto rendimiento** — una alternativa ligera a MongoDB para cuando no quieres (o no puedes) montar un clúster.
+El resultado: una base de datos documental **simple, cifrada y de alto rendimiento** — donde "ML" no es una sigla de negocio, sino la descripción fiel de su arquitectura: índices en **Memoria**, datos en **Log**.
 
 ## ¿Qué es MLStoreDB?
 
@@ -29,10 +37,11 @@ El resultado: una base de datos documental **simple, cifrada y de alto rendimien
 |---|---|
 | **Tipo** | Document store embebido (JSON con `_id`) + grafos + triggers |
 | **Persistencia** | **1 solo archivo cifrado** (AES-256-GCM, Argon2id) — backup = copiar un archivo |
-| **Acceso** | API Go embebida (como SQLite) **o** servidor con wire protocol Mongo-compatible |
-| **Índices** | Hash + ordenados con matriz CSR persistida; unique, compound, rangos |
+| **Acceso** | API Go embebida (como SQLite) **o** servidor wire protocol Mongo-compatible **o** consola web |
+| **Consola web** | `mls-server -web` → CRUD, índices, import/export CSV+JSON, triggers y canvas de grafos interactivo |
+| **Índices** | Hash + ordenados con **matriz CSR en RAM**; unique, compound, rangos |
 | **Seguridad** | RBAC embebido: usuarios, roles, permisos por colección, `fieldDeny`, sesiones |
-| **Grafos** | Aristas tipadas (`edges.<tipo>`), `Neighbors`, `Traverse` (BFS), `ShortestPath` |
+| **Grafos** | Aristas tipadas (`edges.<tipo>`), `Neighbors`, `Traverse` (BFS), `ShortestPath` — todo en RAM |
 | **Automatización** | Hooks Go (`before`/`after`, veto) + triggers JSON declarativos persistidos |
 | **Memoria** | Page cache con presupuesto (`CacheBytes`) — heap estable al crecer los datos |
 | **Concurrencia** | RWMutex + striping, Find paralelo, backpressure de escrituras, `-race` verde |
@@ -47,17 +56,17 @@ Medido en un **Intel i5-2430M** con carga end-to-end de 10.000 documentos con pa
 
 | Operación | Por operación | Nota |
 |---|---:|---|
-| **Lectura por `_id`** | **~5–10 µs** | índice hash, sin tocar disco |
+| **Lectura por `_id`** | **~5–10 µs** | índice hash en RAM, sin tocar disco |
 | **Insert** | **~30–50 µs** | 10k docs ≈ 0.3–0.5 s |
-| **Find con índice** | 1.7–1.9× más rápido que el scan | índice single-field |
+| **Find con índice** | 1.7–1.9× más rápido que el scan | índice CSR single-field en memoria |
 | **Count con índice** | **~5 µs** | O(1) vía `countKey` |
 | **Página 20 con índice+sort+limit** | ~2.5 ms | sobre 10k docs complejos |
 | **Lectura JSON complejo anidado** | **~24 µs** | deep-clone incluido |
-| **Reabrir 10k docs cifrados** | ~100–420 ms | Argon2 + descifrado + rebuild |
+| **Reabrir 10k docs cifrados** | ~100–420 ms | Argon2 + descifrado + rebuild de índices CSR |
 
-> Si esto corre así en una laptop de 2011, imagínalo en hardware moderno — o en un ARM de borde consumiendo vatios.
+> Si esto corre así en una laptop de 2011, imagínalo en hardware moderno — o en un ARM de borde consumiendo vatas.
 
-**Diseñada para ser rápida donde importa:** docs calientes en RAM (page cache con presupuesto), índices CSR pre-materializados que se cargan en microsegundos, Find paralelo acotado a los cores, y flush cifrado append-only con commit point atómico.
+**Memory + Log en acción:** los índices CSR se cargan en microsegundos desde el archivo, viven en RAM para seeks O(1), y el log append-only garantiza escrituras rápidas con durabilidad atómica. Sin WAL, sin fragmentación, sin sorpresas.
 
 ## Empieza en 30 segundos
 
@@ -92,7 +101,7 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -path crm.mlstore \
 mongosh mongodb://127.0.0.1:28917
 ```
 
-En Windows: doble clic a **`iniciar-servidor.bat`** y listo.
+En Windows: doble clic a **`iniciar-servidor.bat`** y listo. Para resetear credenciales sin borrar datos: `mls-server -path crm.mlstore -key "..." -reset-auth`.
 
 ### Grafos — relaciones nativas
 
@@ -134,11 +143,19 @@ MLStoreDB brilla donde necesitas **datos estructurados ricos sin infraestructura
 
 ## Bajo el capó
 
-- **Formato v2**: log de records cifrados (bitcask-style) + COMMIT como único commit point; self-heal ante torn-writes; migración automática v1→v2
-- **Cripto**: Argon2id deriva el KEK → DEK → AES-256-GCM por record; `RotateKeys` re-wrap sin re-cifrar
-- **Índices**: matriz CSR serializada dentro del payload IDX con CRC32-C y fallback automático
-- **Durabilidad a elección**: auto-flush 2s (default), `SyncOnWrite` por escritura, o RAM pura
-- **Robustez**: 201 tests (motor + wire), race detector verde, smoke + loadtest end-to-end, repair ante corrupción
+- **Memory:** índices hash + ordenados con matriz CSR en RAM; page cache con presupuesto; adyacencia de grafo en RAM.
+- **Log:** formato v2 con log de records cifrados (bitcask-style) + COMMIT atómico; self-heal ante torn-writes.
+- **Cripto:** Argon2id deriva el KEK → DEK → AES-256-GCM por record; `RotateKeys` re-wrap sin re-cifrar.
+- **Durabilidad a elección:** auto-flush 2s (default), `SyncOnWrite` por escritura, o RAM pura.
+- **Reset seguro:** `mls-server -reset-auth` borra usuarios/roles/sessions sin tocar los datos.
+
+## 🧪 ¿Cómo puedes ayudar a validar MLStoreDB?
+
+El motor principal está listo y estable, pero necesitamos validación real de la comunidad:
+
+- **Pruebas de estrés en hardware moderno:** si tienes un servidor con SSD NVMe o arquitectura ARM (Apple Silicon, Raspberry Pi), corre los benchmarks (`go test ./db -bench=. -benchtime=1x -run=XXX`) y abre un Issue con tus resultados. Todos los números publicados aquí fueron medidos en un i5 de 2011.
+- **Revisión criptográfica:** el flujo Argon2id → KEK → DEK → AES-256-GCM vive en [`db/file.go`](db/file.go) y [`db/filev2.go`](db/filev2.go). Si tienes experiencia en seguridad, revisa el diseño.
+- **Compatibilidad de herramientas Mongo:** prueba a conectar tu ORM favorito (Mongoose, Prisma, driver oficial de Go/Python) a `mongodb://127.0.0.1:28917`.
 
 ## Estado del proyecto
 
@@ -146,13 +163,15 @@ MLStoreDB brilla donde necesitas **datos estructurados ricos sin infraestructura
 |---|---|
 | Motor: CRUD, filtros, índices, formato cifrado, snapshot, repair | ✅ |
 | Formato v2 paginado + page cache + `Compact` | ✅ |
-| Índices CSR persistidos | ✅ |
+| Índices CSR persistidos en RAM | ✅ |
 | Find paralelo + backpressure + Update copy-on-write | ✅ |
-| RBAC embebido (usuarios/roles/sesiones/fieldDeny) | ✅ |
+| RBAC embebido (usuarios/roles/sessions/fieldDeny) | ✅ |
 | Hooks Go + triggers JSON declarativos | ✅ |
 | Grafos (edges, Traverse, ShortestPath) | ✅ |
 | **Wire protocol Mongo-compatible** (BSON, OP_MSG, CRUD, aggregate, SCRAM-SHA-256) | ✅ |
-| Consola web de administración + canvas de grafos (estilo phpMyAdmin + Neo4j Browser) | ⬜ M9 |
+| **Consola web** (M9): CRUD, índices, import/export CSV+JSON, triggers, canvas de grafos, multi-BD | ✅ completo |
+| **Reset de credenciales** (`-reset-auth`): borra auth sin tocar datos | ✅ |
+| M10 (escalabilidad masiva: index paging, checkpoint .vtp, grafos dinámicos) | ⬜ propuesto |
 
 ## Documentación
 
@@ -160,8 +179,8 @@ MLStoreDB brilla donde necesitas **datos estructurados ricos sin infraestructura
 - 🏗️ [Arquitectura](doc/ARQUITECTURA.md) · 🗂️ [Distribución de archivos](doc/DISTRIBUCION_ARCHIVOS.md)
 - 🔌 [API Go completa](doc/API.md) · 🔍 [Lenguaje de consultas](doc/CONSULTAS.md)
 - 💾 [Formato del archivo](doc/FORMATO_ARCHIVO.md) · 🧪 [Pruebas y benchmarks](doc/PRUEBAS.md)
-- 📋 [Bitácora del plan (M0→M9)](doc/PLAN_V2.md)
+- 📋 [Bitácora del plan (M0→M10)](doc/PLAN_V2.md)
 
 ---
 
-*MLStoreDB: documental como MongoDB, relacional-en-grafos como Neo4j, embebida como SQLite, cifrada como ninguna. Un archivo, todo tu mundo.*
+*MLStoreDB (Memory-Log Store Database):* ***M***emory — índices CSR y page cache en RAM · ***L***og — append-only cifrado con COMMIT atómico. Documental como MongoDB, grafos como Neo4j, embebida como SQLite, cifrada como ninguna. Un archivo, todo tu mundo.*
