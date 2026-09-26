@@ -2,10 +2,12 @@ package wire
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"hash/crc32"
+	"log"
 	"math"
 	"net"
 	"strconv"
@@ -318,14 +320,14 @@ func TestInsertFindRoundTrip(t *testing.T) {
 	ts := startTestServer(t, ServerOptions{})
 	tc := dial(t, ts)
 	ins := okVal(t, tc.cmd(db.Document{
-		"insert":    "users",
+		"insert": "users",
 		"documents": []any{db.Document{
-			"_id":   db.Document{"$oid": "6512f0a0b1c2d3e4f5a6b7c8"},
-			"name":  "Ana",
-			"age":   float64(30),
-			"tags":  []any{"a", "b"},
-			"addr":  db.Document{"city": "Lima", "zip": float64(15001)},
-			"when":  db.Document{"$date": float64(1695000000000)},
+			"_id":  db.Document{"$oid": "6512f0a0b1c2d3e4f5a6b7c8"},
+			"name": "Ana",
+			"age":  float64(30),
+			"tags": []any{"a", "b"},
+			"addr": db.Document{"city": "Lima", "zip": float64(15001)},
+			"when": db.Document{"$date": float64(1695000000000)},
 		}},
 	}))
 	if ins["n"] != float64(1) {
@@ -456,10 +458,10 @@ func TestUpdateOperators(t *testing.T) {
 	up := okVal(t, tc.cmd(db.Document{"update": "t", "updates": []any{db.Document{
 		"q": db.Document{"_id": "1"},
 		"u": db.Document{
-			"$set":    db.Document{"b.nested": "deep", "new": true},
-			"$unset":  db.Document{"keep": ""},
-			"$inc":    db.Document{"a": float64(4)},
-			"$push":   db.Document{"arr": float64(2)},
+			"$set":   db.Document{"b.nested": "deep", "new": true},
+			"$unset": db.Document{"keep": ""},
+			"$inc":   db.Document{"a": float64(4)},
+			"$push":  db.Document{"arr": float64(2)},
 		},
 	}}}))
 	if up["n"] != float64(1) || up["nModified"] != float64(1) {
@@ -946,10 +948,10 @@ func TestSCRAMAuth(t *testing.T) {
 	}
 	clientFirst := "n,,n=admin,r=cnonce123"
 	start := okVal(t, tc.cmd(db.Document{
-		"saslStart":  int32(1),
-		"mechanism":  "SCRAM-SHA-256",
-		"payload":    binaryDoc([]byte(clientFirst)),
-		"options":    db.Document{"skipEmptyExchange": true},
+		"saslStart": int32(1),
+		"mechanism": "SCRAM-SHA-256",
+		"payload":   binaryDoc([]byte(clientFirst)),
+		"options":   db.Document{"skipEmptyExchange": true},
 	}))
 	pl, _ := start["payload"].(db.Document)
 	raw, _, err := parseBinaryExtended(pl["$binary"])
@@ -1069,5 +1071,65 @@ func TestHexIDNormalization(t *testing.T) {
 	}
 	if _, err := normalizeIDValue([]any{}); err == nil {
 		t.Errorf("array _id should fail")
+	}
+}
+
+// Sin -user/-pass no hay credenciales de wire: el cliente debe recibir un errmsg que explique
+// la configuración en lugar del genérico "Authentication failed", y el servidor debe registrarlo.
+func TestSASLStartWithoutWireAuthExplainsConfig(t *testing.T) {
+	var logBuf bytes.Buffer
+	ts := startTestServer(t, ServerOptions{Logger: log.New(&logBuf, "", 0)})
+	tc := dial(t, ts)
+	reply := tc.cmd(db.Document{
+		"saslStart": int32(1),
+		"mechanism": "SCRAM-SHA-256",
+		"payload":   binaryDoc([]byte("n,,n=admin,r=nonce1")),
+	})
+	if reply["ok"] != float64(0) || reply["code"] != float64(18) {
+		t.Fatalf("expected AuthenticationFailed 18, got %v", reply)
+	}
+	msg, _ := reply["errmsg"].(string)
+	if !strings.Contains(msg, "-user/-pass") {
+		t.Fatalf("errmsg debería indicar que falta -user/-pass: %q", msg)
+	}
+	if !strings.Contains(logBuf.String(), "without -user/-pass") {
+		t.Fatalf("el fallo no se registró en el log: %q", logBuf.String())
+	}
+}
+
+// Con RBAC activo, -user/-pass debe ser un usuario del motor: si no lo es, SCRAM supera el gate
+// pero el motor rechaza y hay que dejar el motivo en el log (antes fallaba en silencio).
+func TestSCRAMEngineUserMismatchIsLogged(t *testing.T) {
+	var logBuf bytes.Buffer
+	ts := startTestServer(t, ServerOptions{
+		AuthUser: "admin",
+		AuthPass: "secret",
+		Logger:   log.New(&logBuf, "", 0),
+	})
+	if err := ts.store.CreateRole("root", []db.Permission{{Collection: "*", Read: true, Write: true}}); err != nil {
+		t.Fatalf("createRole: %v", err)
+	}
+	if err := ts.store.CreateUser("otro", "secret", []string{"root"}); err != nil {
+		t.Fatalf("createUser: %v", err)
+	}
+	tc := dial(t, ts)
+	clientFirst := "n,,n=admin,r=cnonceABC"
+	start := okVal(t, tc.cmd(db.Document{
+		"saslStart": int32(1),
+		"mechanism": "SCRAM-SHA-256",
+		"payload":   binaryDoc([]byte(clientFirst)),
+	}))
+	pl, _ := start["payload"].(db.Document)
+	raw, _, _ := parseBinaryExtended(pl["$binary"])
+	fail := scramClientFinish(t, tc, "admin", "secret", clientFirst, string(raw))
+	if fail["ok"] != float64(0) || fail["code"] != float64(18) {
+		t.Fatalf("expected AuthenticationFailed 18, got %v", fail)
+	}
+	msg, _ := fail["errmsg"].(string)
+	if !strings.Contains(msg, "RBAC active") {
+		t.Fatalf("errmsg debería explicar el desajuste -user/_users: %q", msg)
+	}
+	if !strings.Contains(logBuf.String(), "_users") {
+		t.Fatalf("el desajuste no se registró en el log: %q", logBuf.String())
 	}
 }

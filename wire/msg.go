@@ -11,6 +11,21 @@ import (
 	"mlstoredb/db"
 )
 
+// parseOpMsgBody interpreta un cuerpo OP_MSG completo (flags + secciones) y lo convierte
+// en un mensaje. Se usa para reensamblar mensajes OP_MSG fragmentados con moreToCome=true.
+func parseOpMsgBody(body []byte) (*message, error) {
+	if len(body) < 5 {
+		return nil, fmt.Errorf("wire: OP_MSG too short")
+	}
+	flags := binary.LittleEndian.Uint32(body[0:4])
+	payload := body[4:]
+	m := &message{flags: flags, moreToCome: flags&flagMoreToCome != 0}
+	if err := parseSections(m, payload); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 const (
 	opReply       int32 = 1
 	opUpdate      int32 = 2001
@@ -81,6 +96,68 @@ func readMessage(r *bufio.Reader) (*message, error) {
 	if _, err := io.ReadFull(r, body); err != nil {
 		return nil, err
 	}
+
+	// Acumular fragmentos OP_MSG con moreToCome=true.
+	// Los clientes MongoDB (mongosh/Compass) envían inserts grandes en
+	// múltiples mensajes OP_MSG; el último tiene moreToCome=false.
+	if h.opCode == opMsg && len(body) >= 4 && binary.LittleEndian.Uint32(body[0:4])&flagMoreToCome != 0 {
+		var allBodies [][]byte
+		allBodies = append(allBodies, body)
+		for {
+			var nhb [16]byte
+			if _, err := io.ReadFull(r, nhb[:]); err != nil {
+				return nil, err
+			}
+			nh := msgHeader{
+				length:     int32(binary.LittleEndian.Uint32(nhb[0:4])),
+				requestID:  int32(binary.LittleEndian.Uint32(nhb[4:8])),
+				responseTo: int32(binary.LittleEndian.Uint32(nhb[8:12])),
+				opCode:     int32(binary.LittleEndian.Uint32(nhb[12:16])),
+			}
+			if nh.length < 16 || nh.length > maxMessageSize {
+				return nil, fmt.Errorf("wire: fragment length %d invalid", nh.length)
+			}
+			nbody := make([]byte, nh.length-16)
+			if _, err := io.ReadFull(r, nbody); err != nil {
+				return nil, err
+			}
+			allBodies = append(allBodies, nbody)
+			if len(nbody) < 4 || binary.LittleEndian.Uint32(nbody[0:4])&flagMoreToCome == 0 {
+				break
+			}
+		}
+		// Verificar checksum del último fragmento si está presente.
+		lastBody := allBodies[len(allBodies)-1]
+		if len(lastBody) >= 4 && binary.LittleEndian.Uint32(lastBody[0:4])&flagChecksumPresent != 0 {
+			var signed []byte
+			signed = append(signed, hb[:]...)
+			for i, frag := range allBodies {
+				if i == 0 {
+					signed = append(signed, frag...)
+				} else if len(frag) > 4 {
+					signed = append(signed, frag[4:]...)
+				}
+			}
+			signed = signed[:len(signed)-4]
+			want := binary.LittleEndian.Uint32(lastBody[len(lastBody)-4:])
+			got := crc32.Checksum(signed, crc32c)
+			if got != want {
+				return nil, fmt.Errorf("wire: OP_MSG checksum mismatch")
+			}
+		}
+		// Reconstruir un solo body: el primero aporta flags+sections;
+		// los siguientes aportan sections adicionales (quitar sus 4 bytes de flags).
+		var combined []byte
+		for i, frag := range allBodies {
+			if i == 0 {
+				combined = append(combined, frag...)
+			} else if len(frag) > 4 {
+				combined = append(combined, frag[4:]...)
+			}
+		}
+		body = combined
+	}
+
 	m := &message{opCode: h.opCode, requestID: h.requestID}
 	switch h.opCode {
 	case opMsg:

@@ -1,0 +1,40 @@
+===FILE db/export.go
+--- 11 11
+// sensitiveFields nunca se exportan a CSV (DESIGN §7.1 / análisis D1).
+--- 28 29
+// SetSensitiveFields declara campos adicionales ocultos en el CSV para una colección
+// (unión con la lista negra global). Reemplaza cualquier lista anterior.
+--- 43 43
+// SensitiveFields devuelve la lista de campos sensibles propia de la colección.
+--- 54 57
+// ExportCSV escribe una fila por documento; las columnas son la unión de las claves
+// de primer nivel (el orden de aparición del recorrido ordenado se sustituye por claves
+// ordenadas para mayor estabilidad, pero _id va siempre primero). BOM UTF-8 para Excel.
+// Los campos sensibles se omiten (R8).
+// Cuando existe al menos 1 usuario (M4), la exportación cruda del Store devuelve ErrUnauthorized.
+--- 79 79
+// exportación vacía con solo la cabecera _id
+--- 93 93
+// Materializar los documentos (puede cargar entradas frías) y recoger las columnas.
+--- 103 103
+// conjunto de columnas: _id primero y luego el resto de claves de primer nivel ordenadas
+--- 121 121
+// BOM UTF-8
+--- 162 162
+// evita 42 en lugar de 42.0 cuando es un entero
+--- 172 172
+// anidados / arrays → string JSON (RFC 4180 mediante el entrecomillado de csv.Writer)
+--- 181 181
+// Migration es un cambio de esquema solo hacia adelante (DESIGN §7.2).
+--- 188 190
+// ApplyMigrations ejecuta las migraciones pendientes en orden y persiste schema_version.
+// Un almacén con una schema_version más nueva que la última migración se rechaza
+// ("actualiza el programa"). Hacer una instantánea antes de migrar es cosa del binario.
+--- 202 202
+// ordenar por versión
+--- 224 226
+// Ejecutar Up fuera del bloqueo... tenemos el lock tomado; Up puede llamar a métodos del
+// Store que bloquean → deadlock. Documentado: Up no debe llamar a métodos bloqueantes del
+// Store, O se libera el lock en cada migración.
+// Más seguro: liberar el lock para Up y volver a tomarlo para subir la versión.
+===END

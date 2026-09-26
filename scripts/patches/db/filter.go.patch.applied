@@ -1,0 +1,46 @@
+===FILE db/filter.go
+--- 8 10
+// match aplica filtros: nil/vacío = todos los documentos.
+// Soportados: $eq $ne $gt $gte $lt $lte $in $nin $regex $exists $and $or $not
+// más igualdad implícita en el primer nivel.
+--- 28 28
+// Operadores lógicos en el primer nivel o anidados bajo un campo.
+--- 35 35
+// Operadores de consulta anidados: {"field": {"$gt": 5}}
+--- 48 49
+// La igualdad implícita sobre un campo ausente solo encaja con la semántica de nil/ausente:
+// coincide si cond es nil (Mongo: ausente coincide con null en $eq con null).
+--- 52 52
+// Camino de array: coincide si CUALQUIER elemento es igual (DESIGN §6.1).
+--- 61 62
+// matchOpsMulti aplica los operadores si CUALQUIERA de los vals cumple todos los operadores (semántica de array).
+// El caso vals vacío + exists=false se trata dentro de matchOneOp mediante el flag exists.
+--- 67 67
+// Se prueba cada valor; hay éxito si un valor cumple todos los operadores.
+--- 140 140
+// $regex + $options se tratan juntos primero (el orden de iteración del mapa es aleatorio).
+--- 217 217
+			return true, nil // ya se aplicó en matchOps antes de iterar
+--- 219 219
+// $not con una expresión de operadores
+--- 222 222
+// $not con un valor tipo regex no está soportado en este nivel
+--- 235 238
+// $regex es especial: puede aparecer junto a $options.
+// Al iterar el mapa de operadores, $options por sí solo se ignora; $regex aplica las
+// opciones si están presentes en el mismo mapa. Para evitar problemas de orden del
+// mapa, matchOps trata $regex buscando el $options hermano — se le pasa el mapa
+// completo de operadores mediante matchOpsRegex.
+--- 241 241
+// Se permiten comparaciones string/string y número/número; entre tipos distintos → false (no es error).
+--- 270 270
+// comparaciones bool / nil
+--- 282 283
+// hasOpKeys indica si d parece una expresión de operadores (claves que empiezan por $).
+// Los $-ops desconocidos siguen yendo a matchOps para que devuelvan ErrBadFilter.
+--- 293 293
+// lookup recorre la ruta con puntos "a.b.c" y devuelve la primera coincidencia (ayudante heredado).
+--- 302 303
+// lookupMulti recorre la ruta con puntos; los arrays se expanden y devuelve TODOS los
+// valores hoja alcanzables por la ruta (Mongo: "items.item_id" puede tocar varios elementos).
+===END

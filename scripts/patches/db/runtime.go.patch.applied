@@ -1,0 +1,16 @@
+===FILE db/runtime.go
+--- 11 12
+// acquireLock toma un bloqueo de proceso exclusivo junto al archivo de la base de datos.
+// Devuelve ErrAlreadyOpen si otro proceso lo tiene.
+--- 26 27
+// Snapshot escribe el estado actual en dest como un .mlstore totalmente cifrado sin
+// cambiar s.path (respaldo R10). Se ejecuta fuera de s.mu, igual que Flush.
+--- 47 48
+// startAutoFlush lanza un ticker en segundo plano que hace Flush cuando hay datos sucios
+// (periodo de Options.AutoFlush, 2s por defecto). Se detiene con Close.
+--- 68 68
+// Flush solo mantiene s.mu brevemente (instantánea); la E/S queda fuera.
+--- 85 86
+// OpenWithLock es Open + bloqueo de archivo exclusivo + ticker de auto-flush.
+// Prefiérelo para el binario MLD (propietario único del proceso).
+===END

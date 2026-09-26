@@ -1,0 +1,67 @@
+===FILE db/hooks.go
+--- 7 7
+// Eventos de hook (M5a). Ids de tipo string para que los triggers JSON de M5b puedan reutilizarlos.
+--- 20 20
+// maxHookDepth acota las mutaciones anidadas disparadas por hooks (M5a).
+--- 22 22
+// hookQueueSize es la FIFO acotada de trabajos de OnAsync.
+--- 26 29
+// HookFunc se ejecuta para un evento coincidente. Los hooks before-* corren de forma
+// síncrona y pueden vetar la mutación devolviendo un error. Los hooks after-* corren
+// después de aplicar la mutación (On: en línea, el error se ignora; OnAsync: en cola).
+// Las mutaciones anidadas DEBEN pasar por los métodos de HookContext (guardas de profundidad/ciclo).
+--- 32 32
+// HookContext se pasa a un hook: carga útil del evento + acceso al Store con alcance.
+--- 37 38
+	Doc        Document // documento nuevo / patch (insert/update/upsert); nil para delete
+	Old        Document // imagen previa (update/delete/upsert); nil para insert
+--- 44 44
+// Get/Find/Count son ayudantes de lectura (se ejecutan como principal de confianza del hook).
+--- 57 58
+// Insert/Upsert/Update/Delete propagan el marco del hook (comprobaciones de profundidad + ciclo).
+// Se ejecutan como hookBypass (de confianza; el RBAC no controla el código de los hooks).
+--- 75 77
+// hookBypass es el principal de confianza para las mutaciones iniciadas por hooks.
+// system=true ⇒ válido sin estar en el mapa de sesiones; el RBAC lo salta.
+// Las operaciones del Store siguen rechazando las colecciones del sistema para todos.
+--- 80 80
+// hookFrame enlaza una invocación de hook con sus ancestros (recorrido de profundidad + ciclo).
+--- 90 90
+	coll  string // "" o "*" = todas las colecciones
+--- 103 103
+	barrier chan struct{} // centinela de WaitAsyncHooks (reg == nil)
+--- 106 107
+// On registra un hook síncrono. coll "" o "*" coincide con todas las colecciones.
+// Los hooks before-* pueden vetar (devolver error); los errores de after-* se ignoran.
+--- 112 114
+// OnAsync registra un hook after-* en la cola FIFO acotada del worker.
+// Encolar bloquea cuando la cola está llena (contrapresión). Los before-* se rechazan:
+// los hooks asíncronos no pueden vetar.
+--- 139 139
+// Off elimina un hook por id; indica si existía.
+--- 165 165
+// matchHooks devuelve los registros de event+coll. El llamador no debe tener hooksMu.
+--- 178 178
+// beginHookErr valida profundidad + ciclo y construye el contexto hijo.
+--- 198 198
+// runBeforeHooks ejecuta los registros before-* coincidentes; el primer error veta.
+--- 213 213
+// runAfterHooksInline ejecuta los registros after-* síncronos (los errores se ignoran).
+--- 225 226
+// queueAfterHook despacha los registros after-*: síncronos en línea, asíncronos a la cola FIFO.
+// No hace nada si no coincide ningún registro (coste cero cuando no hay hooks).
+--- 254 254
+			case q <- job: // bloquea cuando está llena (contrapresión de la FIFO acotada)
+--- 268 268
+// ensureHookWorker arranca de forma perezosa el worker asíncrono de la FIFO.
+--- 282 283
+// hookWorker drena la FIFO acotada. Los canales se pasan como argumentos (no se releen
+// de los campos) para que stopHookWorker pueda anular los campos sin carrera.
+--- 297 297
+					continue // ciclo/profundidad en el camino asíncrono: descartar
+--- 306 306
+// stopHookWorker detiene el worker asíncrono (Close). Descarta los trabajos no entregados.
+--- 319 320
+// WaitAsyncHooks bloquea hasta que todos los trabajos asíncronos en cola terminan (barrera).
+// Ayudante para tests/operaciones — no lo llames desde dentro de un hook (deadlock).
+===END

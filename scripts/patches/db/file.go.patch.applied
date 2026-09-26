@@ -1,0 +1,130 @@
+===FILE db/file.go
+--- 23 23
+// formatVersion 2 = cabecera + log de registros solo-añadir (M1).
+--- 25 25
+// headerSize: cuerpo de 120B + HMAC 32B. dek_wrapped = 32B de DEK + 16B de tag GCM.
+--- 30 30
+// Valores por defecto de Argon2id (se guardan por archivo en la cabecera).
+--- 34 34
+// Parámetros ligeros para tests / entornos embebidos con poca RAM (se siguen registrando en la cabecera).
+--- 39 39
+// Valores por defecto de auto-flush y bloqueo (sobrescribibles con Options.AutoFlush/LockFile).
+--- 44 44
+// Options contiene el material criptográfico para Open/Flush.
+--- 46 46
+// MasterKey es el secreto del proveedor (entrada de la KEK). Obligatoria en archivos cifrados.
+--- 48 49
+// MachineID se mezcla en la KEK (DESIGN §4.3). Vacío = "default".
+// Ver ResolveMachineID para obtener una identidad aleatoria por instalación.
+--- 51 51
+// LightKDF usa parámetros Argon2 más rápidos (tests). Se ignora al reabrir un archivo existente.
+--- 53 55
+// SyncOnWrite hace que cada mutación correcta llame a FlushSync antes de
+// retornar (duradero, más lento). Úsalo para tokens/ajustes; déjalo en false
+// para sincronización masiva, donde el auto-flush es suficiente.
+--- 57 60
+// AutoFlush es el periodo del ticker del flush en segundo plano que inicia
+// OpenWithLock (solo datos sucios). Cero o negativo = 2s por defecto.
+// Usa periodos cortos para cachés sensibles a la durabilidad y largos para
+// reducir la amplificación de escritura en cargas mayoritariamente de lectura.
+--- 62 65
+// LockFile es el nombre del archivo de bloqueo de proceso que crean
+// OpenWithLock/Repair en el directorio de la base de datos. Vacío = "mlstoredb.lock".
+// Usa nombres distintos para abrir bases de datos diferentes de forma
+// independiente en el mismo directorio (un archivo de bloqueo por base de datos).
+--- 67 68
+// CacheBytes es el presupuesto de caché de páginas residente para documentos fríos.
+// Cero = 256 MiB por defecto. Negativo = sin límite (sin expulsión).
+--- 70 71
+// FindWorkers acota la materialización en paralelo de Find/Count (M3).
+// Cero = GOMAXPROCS. Negativo = 1 (totalmente serie). Positivo = n workers.
+--- 73 75
+// MaxPendingWrites activa la contrapresión de escritura mientras hay un flush
+// en curso (M3): los escritores se bloquean cuando (writeSeq-durableSeq) alcanza
+// ese número de mutaciones, hasta que el flush termina. Cero = sin límite (heredado).
+--- 77 78
+// SessionTTL acota la vida de las sesiones de Authenticate (M4). Cero = 24h por defecto.
+// Negativo = las sesiones nunca caducan (hasta Revoke/ChangePassword/Close).
+--- 82 82
+// findWorkers resuelve el número de workers paralelos de Find.
+--- 97 97
+// maxPendingWrites resuelve el límite de contrapresión de escritura (0 = sin límite).
+--- 105 105
+// autoFlushInterval resuelve el periodo de auto-flush configurado.
+--- 113 113
+// lockFileName resuelve el nombre del archivo de bloqueo de proceso.
+--- 121 121
+// sessionTTL resuelve la vida de las sesiones de Authenticate (0=por defecto, <0=nunca).
+--- 141 141
+// header es el prefijo en claro del archivo .mlstore (DESIGN §4.1).
+--- 153 153
+	DEKWrapped    [48]byte // AES-GCM(32B de DEK) = 32 + 16 de tag
+--- 191 191
+// bytes [0..headerBodySize) para el HMAC (todo lo anterior a HeaderHMAC)
+--- 251 252
+// fileColl / fileData = plaintext_v1 (DESIGN §4.2) — se siguen usando para las
+// lecturas v1 y para el camino de reparación/reconstrucción "eager" sobre registros v2.
+--- 269 270
+// loadFileData reconstruye las colecciones en el modelo de entradas (documentos residentes).
+// Carga con validación: _id no string ⇒ ErrNoID; conflicto de único ⇒ ErrDuplicate.
+--- 303 303
+// markEntryResident contabiliza una carga residente en el registro de caché.
+--- 308 310
+// tamaño aproximado: la carga por puntero no se conoce hasta medirla — se usa 0
+// y se deja que loadEntry/cacheAdmit fije los tamaños reales en las cargas frías.
+// En cargas "eager" el tamaño se queda en 0 (sin presión de expulsión desde la migración).
+--- 336 336
+// atomicReplace escribe los datos en path mediante tmp + rename (DESIGN §5.4).
+--- 358 358
+// Windows: el rename sobre un archivo existente puede fallar; como respaldo se borra el destino antes.
+--- 380 381
+// authHeader verifica la cabecera y desenvuelve la DEK (v1 y v2).
+// Devuelve kek, dek, máquina efectiva y parámetros KDF — o ErrCorrupt.
+--- 415 417
+// decryptFileBytes autentica y descifra los bytes de un archivo v1 en fileData.
+// Devuelve el material de cabecera, la DEK, el id de máquina efectivo (reintento heredado) y los parámetros KDF.
+// Cualquier fallo de HMAC / desenvolvimiento / GCM / JSON ⇒ ErrCorrupt (irrecuperable).
+--- 445 445
+// Open carga un archivo .mlstore cifrado, o crea uno nuevo si la ruta no existe.
+--- 457 457
+// archivo nuevo
+--- 499 499
+// log de registros v2
+--- 512 514
+// Flush serializa, cifra y escribe el log de registros (no hace nada si está limpio).
+// La instantánea se toma bajo RLock; la compresión, la criptografía y la E/S de disco
+// se ejecutan fuera de s.mu para no bloquear durante toda la escritura a Find/Get/Insert concurrentes.
+--- 537 537
+// applyFlushed actualiza la contabilidad del almacén tras escribir st correctamente.
+--- 543 543
+// M3: las mutaciones incluidas en esta instantánea ya son duraderas.
+--- 547 547
+// Limpiar los flags dirty de las entradas / instalar los nuevos offsets de la instantánea.
+--- 559 559
+// Reescritura completa: instalar offsets de registro nuevos.
+--- 593 593
+// Descartar los borrados ya confirmados.
+--- 603 603
+// copiar a un slice nuevo para liberar el array de respaldo antiguo
+--- 614 616
+// syncPath hace fsync de path (y, con mejor esfuerzo, de su directorio) para que
+// un Flush duradero sobreviva a un corte de corriente tras el rename. La sincronización
+// del directorio es "best-effort" (Windows suele rechazar Sync sobre directorios).
+--- 639 641
+// FlushSync es Flush + fsync del archivo final (y del directorio, con mejor esfuerzo).
+// Úsalo tras escrituras críticas (tokens, ajustes) cuando importe más la durabilidad
+// antes de retornar que la latencia. El fsync no hace nada si el almacén no tiene path.
+--- 656 657
+// afterMutation hace FlushSync opcionalmente cuando Options.SyncOnWrite está activo.
+// No debe llamarse con s.mu tomado (Flush toma flushMu → prepareFlush → mu).
+--- 665 665
+// Close detiene el auto-flush, hace flush (si está sucio), libera el bloqueo y marca cerrado.
+--- 672 672
+// detener primero el ticker (toma s.mu)
+--- 697 698
+// markDirty debe llamarse tras cada mutación correcta cuando hay respaldo en archivo.
+// El llamador debe tener s.mu (bloqueo de escritura).
+--- 707 708
+// markEntryMutated incrementa dirtyGen y marca la entrada para el próximo flush.
+// El llamador debe tener s.mu.
+===END

@@ -1,0 +1,101 @@
+===FILE db/filev2_test.go
+--- 12 12
+// M1: log de registros formatVersion 2 — sin cuerpo JSON en texto plano y el COMMIT como punto de confirmación.
+--- 38 38
+		// el cuerpo no debe contener JSON en texto plano ni contenido de documentos
+--- 45 45
+		// debe terminar con un registro COMMIT (tipos de escaneo)
+--- 73 73
+	opts.CacheBytes = 8 << 10 // presupuesto diminuto → fuerza presión de expulsión
+--- 78 78
+		// Carga útil incompresible para que el tamaño del registro en disco refleje la presión del presupuesto.
+--- 83 83
+	blob := json.Number(string(payload)) // se guarda como string crudo en el documento
+--- 98 98
+		// Tras abrir, los documentos están fríos (solo offsets de registro).
+--- 106 106
+		// Acceder a un documento → pasa a residente.
+--- 114 114
+		// Recorrer muchos documentos para presionar el presupuesto de 64KiB → se esperan expulsiones.
+--- 127 127
+		// Find sigue devolviendo todos los documentos (carga los fríos según haga falta).
+--- 147 147
+		// El segundo flush añade otro documento (sawFile → modo append).
+--- 161 161
+		// Simular un append cortado: añadir una cabecera de registro parcial (sin el registro completo).
+--- 175 175
+		// El archivo debería haberse truncado hasta el último COMMIT.
+--- 178 178
+			// puede ser igual a raw si el truncado cayó justo en el final del commit
+--- 197 197
+		// Reescribir los mismos ids muchas veces → bytes muertos en el log.
+--- 216 216
+		// Datos intactos + log todavía válido.
+--- 233 233
+		// Comprobar que los offsets son válidos (Get funciona con documentos fríos).
+--- 242 242
+		// Construir a mano un archivo v1 mínimo con los ayudantes criptográficos actuales.
+--- 306 306
+		// Open v1 → carga en memoria y reescritura v2 pendiente.
+--- 322 322
+		// El primer flush migra a v2.
+--- 333 333
+		// Reabrir como v2.
+--- 347 347
+		// El índice se sigue aplicando.
+===END
+===FILE db/parallel_test.go
+--- 11 11
+// M3: equivalencia de Find en paralelo, Find‖Insert‖Flush y contrapresión de escritura.
+--- 17 17
+	opts.FindWorkers = -1 // línea base en serie
+--- 59 59
+		// El mismo almacén, ahora forzando muchos workers.
+--- 76 76
+		// Equivalencia de Count.
+--- 111 111
+		// Bucle de Flush (ciclo de vida aparte — se detiene tras terminar los escritores).
+--- 129 129
+		// Escritor + lector en paralelo.
+--- 164 164
+		// Reapertura: están todos los documentos.
+--- 189 193
+		// Marcar el flag "en curso" a mano es una carrera; en su lugar: preparar un flush
+		// con prepareFlush (fija flushInProgress) y escribir suficientes mutaciones para que
+		// los siguientes escritores deban esperar hasta que applyFlushed haga broadcast.
+		// Comprobación determinista más simple: sin ningún flush en curso, las escrituras
+		// nunca se bloquean.
+--- 199 199
+		// Ahora intercalar prepareFlush (mantiene flushInProgress) con los escritores.
+--- 214 215
+		// Los escritores que superan MaxPendingWrites mientras el flush está abierto deben
+		// esperar. Se lanzan en asíncrono; se completa el flush; todos deben acabar.
+--- 233 233
+		// Dar un momento a los escritores para que se acumulen contra el flush abierto y luego confirmar.
+--- 239 239
+		// Terminar el flush.
+--- 266 266
+		// Un patch demasiado grande falla en checkDocSize → el documento vivo no cambia (COW).
+--- 293 293
+		// Una actualización COW correcta instala el siguiente.
+===END
+===FILE db/repair_test.go
+--- 35 35
+		// El archivo debe contener ya el documento sin Close ni auto-flush.
+--- 60 60
+		// La mutación retornó ⇒ ya es duradero (sin Close/Flush ni llamada manual).
+--- 126 126
+		// La Snapshot debe seguir abriéndose limpiamente.
+--- 136 136
+		// Repair no puede arreglar un fallo de GCM.
+--- 170 170
+		// Saltarse la API: _id no string en el archivo.
+--- 205 205
+		// Índices reconstruidos: el único sobre n sigue funcionando si añadimos uno
+--- 222 222
+		// Inyectar un segundo documento con la misma clave única sin entrada de índice.
+--- 250 250
+		// Se conservó el _id más bajo, "a"
+--- 257 257
+		// El índice único funciona tras la reparación
+===END

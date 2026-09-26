@@ -1,0 +1,35 @@
+===FILE db/repair.go
+--- 13 13
+// RepairReport resume lo que cambió Repair al reescribir el archivo del almacén.
+--- 24 34
+// Repair intenta recuperar un almacén semánticamente corrupto en path y reescribe un
+// archivo limpio (reemplazo atómico). Puede arreglar:
+//   - documentos con _id no string (se descartan); si falta el _id se genera un ULID
+//   - documentos que superan el límite de 1MB (se descartan)
+//   - claves _id duplicadas en el archivo (se conserva el primer id ordenado)
+//   - conflictos de índice único (se conserva el _id ordenado menor y se descartan los posteriores)
+//   - estado de índices obsoleto o roto (los índices se reconstruyen desde los documentos supervivientes)
+//
+// No puede arreglar corrupción criptográfica (magic/HMAC/GCM/JSON incorrectos): esos casos
+// devuelven ErrCorrupt — restaura una Snapshot en su lugar. Toma el mismo flock que
+// OpenWithLock; devuelve ErrAlreadyOpen si otro proceso tiene el archivo.
+--- 83 83
+			// Escaneo tolerante: descifrar todos los registros DOC sin tener en cuenta COMMIT o sospechas.
+--- 113 113
+	s.v1Migration = true // forzar una reescritura completa como v2 limpio
+--- 125 126
+// loadV2FileDataTolerant descifra todos los registros DOC/META de un archivo v2
+// (ignorando la frontera COMMIT) y los lleva a fileData para Repair.
+--- 185 185
+	// orden estable de documentos para elegir duplicados/conflictos de forma determinista
+--- 196 198
+// loadFileDataRepair reconstruye las colecciones de forma tolerante y rellena rep.
+// Los documentos se cargan primero y los índices se reconstruyen después, para que los
+// conflictos de único puedan descartar el documento posterior en lugar de abortar toda la apertura.
+--- 218 218
+			// Paso 1: conservar los documentos legibles (orden de id creciente → elección determinista de duplicados).
+--- 242 242
+			// Orden estable para resolver conflictos de único (conservar el _id menor).
+--- 249 249
+			// Paso 2: reconstruir los índices; si hay conflicto de único ⇒ descartar el documento posterior.
+===END

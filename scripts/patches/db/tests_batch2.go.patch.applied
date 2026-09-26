@@ -1,0 +1,106 @@
+===FILE db/reset_auth_test.go
+--- 45 45
+		// reabrir y verificar
+--- 54 54
+		// los datos deben sobrevivir
+--- 62 62
+		// la API cruda funciona sin autenticación (modo permisivo)
+===END
+===FILE db/rotate_test.go
+--- 18 18
+// rotateSetup crea un almacén limpio con respaldo en archivo, con dos documentos, y lo cierra.
+--- 60 60
+		// Con la clave nueva se abre y los datos están intactos.
+--- 71 71
+		// La clave maestra antigua ya no debe descifrar.
+--- 115 115
+		// Argumentos vacíos = volver a envolver con las mismas credenciales (salt nuevo) — debe ser seguro.
+--- 171 171
+		// Manipular la cabecera en disco (byte de schema_version) a espaldas del almacén.
+--- 188 188
+		// Una rotación fallida debe dejar el archivo exactamente como estaba.
+--- 217 218
+// La prueba crítica de adopción: las credenciales rotadas en RAM deben permanecer, de modo
+// que las mutaciones posteriores a la rotación hagan flush con la NUEVA KEK y la reapertura coincida.
+--- 229 229
+		// Mutar DESPUÉS de la rotación; el siguiente flush vuelve a envolver con la nueva KEK.
+--- 315 316
+		// El proveedor mueve la base de datos a otra máquina: se rota el vínculo de máquina
+		// mientras el archivo sigue en la máquina de origen.
+--- 326 326
+		// Copiar el archivo al directorio de datos de la máquina destino.
+--- 334 334
+		// Se abre en el destino con el nuevo vínculo (y solo con él).
+===END
+===FILE db/runtime_test.go
+--- 24 24
+		// mutar tras la instantánea
+--- 28 28
+		// el respaldo solo tiene el documento 1
+--- 39 39
+		// el principal tiene ambos
+--- 73 73
+		// tras cerrar, el bloqueo se libera
+--- 93 93
+		// NO llamar a Flush/Close — esperar al ticker
+--- 96 97
+		// abrir sin bloqueo (lado lector): el bloqueo sigue en manos de s — usar Open, no OpenWithLock.
+		// En realidad s tiene el bloqueo; leer con Open crudo es correcto (Open no comprueba el bloqueo)
+--- 120 120
+		// el archivo de bloqueo puede seguir existiendo, pero debe estar desbloqueado
+--- 138 139
+		// tras cerrar, mutar y esperar NO debería escribir automáticamente con el ticker
+		// (el almacén está cerrado; markDirty sigue poniendo el flag, pero el ticker está parado)
+--- 142 144
+		// reabrir: no debería haber "late" salvo que Close hiciera flush (no lo hizo — insert tras cerrar)
+		// Nota: Insert tras Close sigue funcionando en memoria; el ticker está parado, así que no hay flush.
+		// El estado final en disco = lo que Close dejó grabado (vacío).
+===END
+===FILE db/setroles_test.go
+--- 8 10
+// TestSetUserRoles verifica el reemplazo de roles in situ (API de administración M9):
+// se conservan el hash de contraseña y los campos extra, se aplica la validación de roles
+// y el cambio surte efecto en el siguiente Authenticate.
+--- 14 14
+		// camino feliz: bob reader -> admin+reader
+--- 32 32
+		// regresión (bug de M9d): el cambio de rol NO debe reiniciar la contraseña
+--- 40 40
+		// los nuevos roles se respetan al iniciar sesión: bob ya puede escribir en "q" por el comodín de admin
+--- 49 49
+		// usuario desconocido
+--- 53 53
+		// rol desconocido
+--- 57 57
+		// se permiten roles vacíos (usuario sin permisos)
+===END
+===FILE db/store_test.go
+--- 25 25
+		// falta el _id → ULID automático (DESIGN §3.1)
+--- 114 114
+		// ordenados por _id
+--- 195 195
+		// Almacén nuevo = 0 (sin migrar); las migraciones suben a N.
+===END
+===FILE db/triggers_test.go
+--- 11 11
+		// marcar cada inserción
+--- 32 32
+		// filtro: solo PAID recibe vip; camino de veto con un set sobre el subconjunto filtrado
+--- 73 73
+		// after_insert es síncrono y en línea → la auditoría existe de inmediato
+--- 92 92
+		// before_delete solo muta la vista Old (el documento está a punto de desaparecer) — usa before_update para el ejemplo de unset
+--- 116 116
+		// documento contador
+--- 157 159
+		// el filtro coincide con el documento nuevo (¿vista fusionada con el patch? se evalúa contra patch/Doc=patch) —
+		// en before_update Doc es el PATCH, no el documento completo; el filtro va sobre un campo del patch:
+		// el patch es {"state":"closed"} → el filtro coincide → old.state = "open"
+--- 197 197
+			{Event: AfterInsert, Collection: "q", Actions: []TriggerAction{{Type: "unset", Names: []string{"x"}}}},                       // unset no vale en after
+--- 198 198
+			{Event: BeforeInsert, Async: true, Collection: "q", Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"a": 1}}}}, // async no vale en before
+--- 238 238
+		// colección del sistema oculta + protegida
+===END

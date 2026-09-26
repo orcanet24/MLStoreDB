@@ -1,0 +1,5 @@
+===FILE db/machine_nonwindows.go
+--- 5 6
+// machineGuid no está disponible fuera de Windows; la KEK recurre a "default"
+// salvo que Options.MachineID se indique explícitamente.
+===END

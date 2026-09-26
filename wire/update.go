@@ -10,20 +10,20 @@ import (
 )
 
 var updateOps = map[string]bool{
-	"$set":          true,
-	"$unset":        true,
-	"$inc":          true,
-	"$mul":          true,
-	"$min":          true,
-	"$max":          true,
-	"$rename":       true,
-	"$push":         true,
-	"$addToSet":     true,
-	"$pop":          true,
-	"$pull":         true,
-	"$pullAll":      true,
-	"$currentDate":  true,
-	"$setOnInsert":  true,
+	"$set":         true,
+	"$unset":       true,
+	"$inc":         true,
+	"$mul":         true,
+	"$min":         true,
+	"$max":         true,
+	"$rename":      true,
+	"$push":        true,
+	"$addToSet":    true,
+	"$pop":         true,
+	"$pull":        true,
+	"$pullAll":     true,
+	"$currentDate": true,
+	"$setOnInsert": true,
 }
 
 func deepClone(v any) any {

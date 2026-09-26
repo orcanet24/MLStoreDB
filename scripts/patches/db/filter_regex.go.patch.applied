@@ -1,0 +1,12 @@
+===FILE db/filter_regex.go
+--- 9 10
+// regexCache compila cada patrón distinto una sola vez (punto 6).
+// Clave: el patrón una vez aplicadas las $options (por ejemplo "(?i)^a").
+--- 11 11
+var regexCache sync.Map // string → *regexp.Regexp | centinela de error
+--- 35 36
+// applyRegex trata $regex + $options juntos (las opciones pueden aparecer como hermanas).
+// Se llama desde matchOps cuando $regex está presente; $options por si solo no hace nada.
+--- 43 43
+// un valor que no es string nunca coincide con $regex (estilo Mongo)
+===END

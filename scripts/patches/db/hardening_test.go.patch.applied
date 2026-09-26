@@ -1,0 +1,19 @@
+===FILE db/hardening_test.go
+--- 30 30
+			// indexado
+--- 208 208
+		// Tomar la instantánea como hace Flush y luego mutar antes de limpiar dirty (la ventana de carrera).
+--- 276 276
+		// mutar las estructuras anidadas de quien llama
+--- 329 329
+		// el patrón inválido se guarda en caché como error → sigue devolviendo ErrBadFilter
+--- 389 389
+			// el valor x solo aparece si la columna se exporta — comprobar la cabecera
+--- 396 396
+// ayudantes
+--- 423 424
+		// Forzar la línea base semántica: sin camino de índice, clonando la evaluación del
+		// filtro con el comportamiento de Find en un almacén sin índices. Find siempre vuelve
+		// a evaluar cuando no es exacto; para la línea base se usa Count/Find tras asegurar
+		// que no hay índice.
+===END

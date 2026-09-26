@@ -1,0 +1,57 @@
+===FILE db/graph_test.go
+--- 43 43
+		// salientes: c ; entrantes: a
+--- 47 47
+		// vértice / tipo desconocido
+--- 88 88
+			t.Fatal(err) // construir la caché
+--- 90 90
+		// AddEdge es visible
+--- 104 104
+		// Delete genérico sobre edges.* también invalida
+--- 127 127
+		// Insert genérico también invalida
+--- 137 137
+// FindIDs es un pequeño ayudante de test para buscar ids.
+--- 153 153
+		// BFS completo desde a: a(0), b(1), c(1), d(2)
+--- 172 172
+		// MaxDepth=1 → solo a,b,c
+--- 178 178
+		// MinDepth=1 excluye el inicio
+--- 190 190
+		// Incoming desde d → solo por aristas entrantes (¿ninguna hacia d? c→d significa in(d)=c)
+--- 196 196
+		// d, c, b, a por recorrido inverso de entrantes: d←c←b←a y c←a
+--- 201 201
+		// acotado: los valores absurdos no cuelgan
+--- 207 207
+		// se exige un start presente
+--- 219 219
+		// a→c→d (2 aristas, 3 vértices) es el más corto (a→b→c→d son 3 aristas)
+--- 229 229
+		// mismo vértice
+--- 234 234
+		// inalcanzable (x no tiene aristas salientes hacia a)
+--- 239 239
+		// maxDepth=1 es demasiado poco para a→d
+--- 244 244
+		// maxDepth=2 funciona
+--- 249 249
+		// camino inverso de d a a: sin aristas salientes desde d → nil
+--- 259 259
+		_, _ = s.AddEdge("e", "a", "b", nil) // arista paralela
+--- 269 269
+		// sembrar aristas con el almacén abierto
+--- 285 285
+		// la API cruda se deniega cuando la autenticación está activa
+--- 292 292
+		// la sesión de admin funciona
+--- 301 301
+		// sesión sin permiso sobre la colección de aristas → Forbidden
+--- 306 306
+		// AddEdge con sesión y escritura a través de admin
+--- 324 325
+		// ¿Están ocultas las colecciones de aristas en Collections? Son visibles para el
+		// usuario (no son del sistema) — DEBERÍAN aparecer (son colecciones normales).
+===END

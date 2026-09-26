@@ -1,7 +1,7 @@
-# MLStoreDB — Memory-Log Store Database
+﻿# MLStoreDB — Memory-Log Store Database
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-225%20PASS%20%2F%200%20FAIL-brightgreen)
+![Tests](https://img.shields.io/badge/tests-233%20PASS%20%2F%200%20FAIL-brightgreen)
 ![Race](https://img.shields.io/badge/-race-green)
 ![Licencia](https://img.shields.io/badge/tipo-embebida%20%2B%20servidor-blue)
 
@@ -38,7 +38,7 @@ El resultado: una base de datos documental **simple, cifrada y de alto rendimien
 | **Tipo** | Document store embebido (JSON con `_id`) + grafos + triggers |
 | **Persistencia** | **1 solo archivo cifrado** (AES-256-GCM, Argon2id) — backup = copiar un archivo |
 | **Acceso** | API Go embebida (como SQLite) **o** servidor wire protocol Mongo-compatible **o** consola web |
-| **Consola web** | `mls-server -web` → CRUD, índices, import/export CSV+JSON, triggers y canvas de grafos interactivo |
+| **Consola web** | `mls-server -web` → CRUD, índices, import/export CSV+JSON+NDJSON, triggers, **usuarios/roles**, **multi-BD** y canvas de grafos interactivo (ES/EN) |
 | **Índices** | Hash + ordenados con **matriz CSR en RAM**; unique, compound, rangos |
 | **Seguridad** | RBAC embebido: usuarios, roles, permisos por colección, `fieldDeny`, sesiones |
 | **Grafos** | Aristas tipadas (`edges.<tipo>`), `Neighbors`, `Traverse` (BFS), `ShortestPath` — todo en RAM |
@@ -102,6 +102,29 @@ mongosh mongodb://127.0.0.1:28917
 ```
 
 En Windows: doble clic a **`iniciar-servidor.bat`** y listo. Para resetear credenciales sin borrar datos: `mls-server -path crm.mlstore -key "..." -reset-auth`.
+
+#### Conectar con Compass/mongosh a una base creada en la consola web
+
+El servidor sirve por el protocolo Mongo **una sola base**: la de `-path` (o la que resuelve `-db`
+dentro de `-dbdir`). Las bases creadas desde la consola web (`databases/<nombre>/`) las sirve
+**solo la consola** hasta que reinicies apuntando a ellas:
+
+```bash
+# 1) crea la base "crm" en la consola web (http://127.0.0.1:28918) con su usuario admin
+# 2) sírvela por el protocolo Mongo reutilizando ESA base y sus credenciales:
+mls-server -addr 127.0.0.1:28917 -web 127.0.0.1:28918 -dbdir databases \
+    -db crm -user admin -pass "la-clave-que-elegiste"
+
+mongosh "mongodb://admin:la-clave-que-elegiste@127.0.0.1:28917/crm"
+```
+
+Los dos fallos de configuración que dejan a los clientes con *invalid credentials* (y que el
+arranque denuncia ahora explícitamente):
+
+- **Arrancar sin `-user`/`-pass`**: el wire no acepta login SCRAM (`saslStart` → *Authentication
+  failed*), así que Compass/Navicat/mongosh fallan aunque la base tenga usuarios.
+- **`-user` que no existe en la base**: con RBAC activo, `-user`/`-pass` deben ser un usuario del
+  motor (`_users`, creado desde la consola → Usuarios). El arranque lista los usuarios válidos.
 
 ### Grafos — relaciones nativas
 
@@ -169,7 +192,8 @@ El motor principal está listo y estable, pero necesitamos validación real de l
 | Hooks Go + triggers JSON declarativos | ✅ |
 | Grafos (edges, Traverse, ShortestPath) | ✅ |
 | **Wire protocol Mongo-compatible** (BSON, OP_MSG, CRUD, aggregate, SCRAM-SHA-256) | ✅ |
-| **Consola web** (M9): CRUD, índices, import/export CSV+JSON, triggers, canvas de grafos, multi-BD | ✅ completo |
+| **Consola web** (M9): CRUD, índices, import/export CSV+JSON+NDJSON, triggers, canvas de grafos, **usuarios/roles + multi-BD** | ✅ completo |
+| **Auditoría integral docs↔código** (M9x): restauración de la UI, corrección de bugs P1 del forwarder multi-BD, `SetUserRoles` | ✅ 233 PASS · informe en [doc/INFORME_AUDITORIA.md](doc/INFORME_AUDITORIA.md) |
 | **Reset de credenciales** (`-reset-auth`): borra auth sin tocar datos | ✅ |
 | M10 (escalabilidad masiva: index paging, checkpoint .vtp, grafos dinámicos) | ⬜ propuesto |
 
@@ -179,7 +203,7 @@ El motor principal está listo y estable, pero necesitamos validación real de l
 - 🏗️ [Arquitectura](doc/ARQUITECTURA.md) · 🗂️ [Distribución de archivos](doc/DISTRIBUCION_ARCHIVOS.md)
 - 🔌 [API Go completa](doc/API.md) · 🔍 [Lenguaje de consultas](doc/CONSULTAS.md)
 - 💾 [Formato del archivo](doc/FORMATO_ARCHIVO.md) · 🧪 [Pruebas y benchmarks](doc/PRUEBAS.md)
-- 📋 [Bitácora del plan (M0→M10)](doc/PLAN_V2.md)
+- 📋 [Bitácora del plan (M0→M10)](doc/PLAN_V2.md) · 🔎 [Informe de auditoría M9x](doc/INFORME_AUDITORIA.md)
 
 ---
 

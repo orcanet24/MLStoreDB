@@ -1,0 +1,27 @@
+===FILE db/bench_test.go
+--- 21 21
+		// justo por debajo del límite, correcto
+--- 61 61
+// Carga útil tipo ml_orders (realista) para los benchmarks
+--- 157 158
+// complexDoc es una carga útil profunda/anidada tipo ML (~un pedido real con pagos,
+// envío, perfil del comprador y arrays de anotaciones — mapas/slices multinivel).
+--- 229 229
+// Inserción de JSON muy anidado (~2–4 KB por documento).
+--- 240 240
+// Get por _id: clonado en profundidad completo del JSON complejo desde el almacén.
+--- 252 252
+// Find de una página completa de documentos complejos (p. ej. 20 pedidos por cuenta) — clonar la página.
+--- 270 270
+// Proyección: solo campos de primer nivel (se deja atrás la carga útil — camino más barato).
+--- 286 286
+// Count de filtro por ruta anidada (recorrido profundo sin devolver documentos).
+--- 299 299
+// Camino de reapertura: descifrar + deserializar JSON + reconstruir los índices de documentos complejos.
+--- 308 308
+// Construir el archivo una vez fuera del bucle cronometrado.
+--- 329 329
+// conservar el archivo; Open es de solo lectura hasta que haya una mutación
+--- 336 336
+// obtener un documento complejo para demostrar que se recuperó toda la estructura anidada
+===END

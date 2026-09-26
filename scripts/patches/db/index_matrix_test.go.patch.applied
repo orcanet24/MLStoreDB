@@ -1,0 +1,41 @@
+===FILE db/index_matrix_test.go
+--- 9 9
+// M2: matrix CSR de índice embebida en el registro IDX con respaldo por checksum.
+--- 36 36
+		// La matrix en RAM queda viva tras serialize.
+--- 50 50
+		// Cargado por el camino CSR: la matrix debe quedar viva para las búsquedas planas.
+--- 69 69
+		// La búsqueda por rango devuelve los mismos resultados por el camino de la matrix.
+--- 78 78
+		// Explain debe seguir informando IXSCAN para igualdad.
+--- 84 84
+		// Count a través del índice sigue siendo correcto.
+--- 94 94
+				// ¿gana PENDING por orden de inserción? no — el estado lo elige la última condición
+--- 97 97
+		// Recalcular lo esperado con las mismas reglas que en la inserción.
+--- 139 142
+		// Corromper el checksum del CSR dentro de la carga IDX (sigue siendo un registro válido:
+		// se reserializa el JSON de la carga tras invertir el csum y luego se reescribe por un
+		// camino unitario de loadRows — más simple: ejercitar loadRows directamente).
+		// Construir la carga como la emitiría prepareFlush, corromper el CSR y conservar las Rows.
+--- 156 156
+		// Checksum corrupto → valid() falla → loadRows recurre a Rows.
+--- 168 168
+		// La búsqueda sigue funcionando sin la matrix.
+--- 177 177
+		// CSR totalmente inválido (forma) y sin Rows → error → camino "eager".
+--- 180 180
+		bad.CSR.Indptr = []int32{0, 99} // la forma no coincide con Keys
+--- 181 183
+		// ¿recalcular? no — se deja también el checksum mal para que valid() sea false
+		// Y las rows estén vacías. valid() false → recurre a Rows (vacías) → devuelve nil
+		// con ord vacío. Se fuerza la señal "eager": Rows vacías Y CSR nil o incorrecto.
+--- 211 211
+		// Manipular un id → el checksum falla.
+--- 221 221
+		_ = idx.serialize() // deja viva la matrix
+--- 239 239
+		// Construir a mano una carga CSR corrupta: clave única con dos ids.
+===END

@@ -1,0 +1,96 @@
+===FILE db/filev2.go
+--- 426 427
+// eagerV2 reconstruye un fileData a partir de los registros escaneados y sus cargas
+// descifradas, y aplica la semántica de loadFileData (ErrNoID / ErrDuplicate si hay sospechas).
+--- 464 465
+// El orden estable para elegir duplicados de forma determinista lo gestiona
+// loadFileData con un mapa; aquí se ordenan los documentos por id para ser deterministas.
+--- 476 476
+// decodeDocRecord convierte un registro crudo completo (de loadEntry) en un Document.
+--- 495 495
+// buildMeta toma una instantánea del esquema y de las definiciones de colecciones para el registro META.
+--- 515 516
+// stageDocOp serializa el documento y construye un recOp DOC (marca sospechoso
+// cuando el _id o la cobertura de índices parece incorrecta al escribir).
+--- 545 546
+// prepareFlush toma una instantánea del estado del almacén bajo s.mu (bloqueo de escritura
+// breve para los parámetros criptográficos iniciales y luego R/Lock para el contenido).
+// Devuelve nil,nil cuando no hay nada que hacer.
+--- 608 609
+// Reescritura completa cuando el archivo aún no tiene un cuerpo v2 duradero, hay una
+// migración pendiente o Compact/Repair lo forzó. Las instantáneas a un destino nuevo son completas.
+--- 620 620
+			s.v1Migration = false // se consume: este flush reescribe como v2
+--- 627 627
+// Preparar las operaciones bajo el mismo bloqueo (instantánea del contenido).
+--- 630 630
+// Los DELs no tienen sentido en una reescritura (cuerpo nuevo); los documentos salen de entries.
+--- 648 648
+// Registros INDEX: serialización completa en cada flush (diseño M1).
+--- 678 678
+// Entrada fría sin registro (no debería ocurrir si está sucia)
+--- 705 706
+// Orden: DELs, DOCs, META, IDXs, COMMIT (los ensambla buildCommit).
+// Ahora mismo las operaciones van IDX y luego DOC intercalados por colección; abajo se reordenan.
+--- 712 712
+// orderOpsForCommit ordena las operaciones preparadas en el orden de escritura duradero y añade META+COMMIT.
+--- 722 722
+// todavía ninguno
+--- 738 738
+// gen no se usa en la carga; el COMMIT es texto plano vacío.
+--- 750 750
+// encodeRecordBytes serializa una operación preparada a los bytes de disco.
+--- 757 757
+// blob del id: solo coll (la carga lleva fields/unique); se mantiene coll para depurar
+--- 767 767
+// buildHeaderV2 construye la cabecera en claro de un archivo v2.
+--- 783 784
+			FormatVer:     formatVersion, // 2
+			Flags:         0,             // compresión por registro; no hay flag para toda la carga
+--- 799 799
+// writeState serializa y escribe st.path (log de registros v2). Sin bloqueo del almacén.
+--- 867 868
+// openV2 carga un archivo existente con formatVersion>=2: escanea, quizá hace una carga
+// "eager" y construye las entradas. El llamador ya autenticó la cabecera y desenvolvió la dek.
+// data son todos los bytes del archivo.
+--- 874 875
+// Truncar la cola cortada/sin confirmar (autocorrección) — solo cuando somos dueños del
+// path y acabaremos reescribiendo; se hace ya para que el log termine en un COMMIT.
+--- 883 883
+// Coherencia META vs IDX → reconstrucción "eager".
+--- 902 904
+// Todos los documentos residentes; solo se marca para reescritura si la sospecha o el
+// desajuste lo exigen. Un IDX sospechoso o ausente implica que el estado de índices en
+// disco no es fiable: se mantiene sucio para que el próximo Flush reescriba limpio
+// (también cubre las expectativas de Repair).
+--- 907 907
+			s.v1Migration = true // forzar el camino de reescritura completa (se reutiliza el flag)
+--- 925 925
+// Camino normal: entradas frías + definiciones META + filas IDX.
+--- 931 931
+// colecciones desde meta ∪ docs
+--- 956 956
+// Adjuntar las cargas IDX a las colecciones (si hay desajuste estructural, la carga "eager" ya validó las definiciones).
+--- 960 960
+					continue // se eliminó tras un flush anterior (M8 DropCollection)
+--- 965 965
+// Buscar el índice con la definición coincidente o crearlo.
+--- 974 974
+// falta la definición en META — problema estructural → carga "eager"
+--- 979 979
+// reiniciar el estado parcial
+--- 1021 1021
+// Definiciones de índice sin carga IDX → carga "eager" (ya se trata arriba con la comprobación idxSeen).
+--- 1023 1024
+// Entradas de documentos (frías). Condicionadas por META: los registros de
+// colecciones ausentes en el último META pertenecen a colecciones eliminadas (M8 DropCollection).
+--- 1032 1032
+			e := newDocEntry(nil) // frío
+--- 1055 1055
+// prepareV1Migration se llama desde el camino de Open v1 después de loadFileData.
+--- 1061 1062
+// Todos los documentos de loadFileData están residentes; se les dan entradas válidas
+// (lo hace loadFileData). recOff se queda en -1 hasta la reescritura completa de la migración.
+--- 1065 1065
+// Compact reescribe el archivo como un log v2 compacto (elimina bytes muertos / versiones antiguas).
+===END

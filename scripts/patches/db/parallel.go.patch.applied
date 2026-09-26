@@ -1,0 +1,18 @@
+===FILE db/parallel.go
+--- 7 7
+// parallelMinIDs es el umbral de número de candidatos para lanzar workers de Find.
+--- 10 16
+// materializeRefs carga los documentos residentes de los ids (opcionalmente
+// reevaluando el filtro) bajo el s.mu.RLock del llamador. Los workers nunca tocan
+// s.mu/flushMu — solo los internos de loadEntry/match/index (idx.mu, cacheMu), que
+// se anidan correctamente.
+//
+// Orden: los resultados se concatenan por trozo contiguo de ids en el orden de
+// entrada, de modo que plan.order y los recorridos completos de ids ordenados conservan
+// su orden relativo sin volver a ordenar. Gana el primer error no nil (errores de
+// evaluación, por ejemplo un regex inválido).
+--- 25 25
+// Trocear para que cada worker reciba una porción contigua del orden de entrada.
+--- 83 83
+// countMatches es el gemelo para Count de materializeRefs (no retiene Document).
+===END

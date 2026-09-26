@@ -1,0 +1,46 @@
+===FILE adminweb/multiserver.go
+--- 216 218
+		// El Server por base de datos registra sus rutas bajo /api/... — se mantiene el
+		// prefijo para que la petición reenviada llegue al handler real (corrige 405/HTML
+		// en las llamadas de API reenviadas).
+--- 294 297
+// forwardMaxBodyBytes acota el cuerpo que se almacena en búfer para las peticiones
+// reenviadas. El cuerpo se almacena entero porque el servidor por base de datos puede
+// consumirlo de forma asíncrona (p. ej. el worker de importación) después de que el
+// handler externo retorne; un io.Pipe vivo se cortaría cuando net/http cierra el cuerpo.
+--- 307 308
+		// Conservar la query string: los handlers por base de datos dependen de ella
+		// (formato de exportación, skip/limit/filter/sort de exploración, arista/vértice
+		// del grafo, campos de índice, importación).
+===END
+===FILE adminweb/server.go
+--- 150 151
+// Handler devuelve el handler HTTP totalmente montado (rutas + middleware);
+// útil para tests y para incrustarlo bajo un mux propio.
+--- 263 263
+// permAny envuelve un conjunto mínimo de permisos tipo Session para webSession en modo permisivo.
+--- 291 291
+// readJSONLimit lee y decodifica un cuerpo JSON de hasta maxBytes.
+===END
+===FILE adminweb/users.go
+--- 70 71
+		// Reemplazar los roles in situ: conserva el hash de la contraseña (y cualquier
+		// otro campo) en lugar del antiguo borrar+recrear que reiniciaba la contraseña.
+===END
+===FILE wire/msg.go
+--- 14 15
+// parseOpMsgBody interpreta un cuerpo OP_MSG completo (flags + secciones) y lo convierte
+// en un mensaje. Se usa para reensamblar mensajes OP_MSG fragmentados con moreToCome=true.
+===END
+===FILE tools/loadtest/main.go
+--- 147 147
+	// asegurar que el índice existe para comparar en igualdad de condiciones
+--- 239 239
+	// ── Listado del directorio ──
+--- 246 246
+	// echar un vistazo al magic de la cabecera
+--- 272 272
+	// el índice único se sigue aplicando
+--- 276 276
+	// comprobar puntualmente que la actualización persistió
+===END

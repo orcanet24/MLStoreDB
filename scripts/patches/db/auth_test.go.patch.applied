@@ -1,0 +1,35 @@
+===FILE db/auth_test.go
+--- 15 15
+	s.opts.LightKDF = true // argon2 rápido para los tests
+--- 19 20
+// bootstrap crea el rol admin (rw sobre *), el rol reader (r sobre q con fieldDeny)
+// y los usuarios admin/reader. Devuelve el store.
+--- 75 75
+		// la API cruda del Store ahora está denegada
+--- 101 101
+		// colecciones del sistema ocultas
+--- 158 158
+		// sembrar a través de la sesión de admin
+--- 170 170
+		// reader tiene Read sobre q → Get/Find funcionan
+--- 177 177
+		// pero no Write
+--- 187 187
+		// colección sin permiso de lectura ("zzz" no está en la lista de reader)
+--- 191 191
+		// reader tiene escritura sobre "other"
+--- 221 221
+		// los filtros que sondean un campo denegado → ErrForbidden
+--- 228 228
+		// sondeo lógico anidado
+--- 233 233
+		// ExportCSV oculta el campo denegado
+--- 244 244
+		// admin (comodín, sin fieldDeny) ve salary
+--- 313 313
+		// incluso con la autenticación desactivada, el CRUD genérico no puede escribir en colecciones del sistema
+--- 320 320
+		// con la autenticación activa, las sesiones tampoco pueden tocar colecciones del sistema
+--- 413 413
+		// Collections sigue ocultando las colecciones del sistema
+===END

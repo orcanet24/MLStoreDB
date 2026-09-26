@@ -1,0 +1,28 @@
+===FILE db/colladmin_test.go
+--- 8 10
+// Soporte del wire M8: UpdateFields, CreateCollection, DropCollection (más las variantes
+// de administración de Session) y el escaneo condicionado por META que evita que las
+// colecciones eliminadas resuciten a partir de registros DOC/IDX obsoletos.
+===END
+===FILE db/export_test.go
+--- 42 42
+		// el CSV duplica las comillas dobles (por ejemplo {"a":1})
+--- 85 85
+		// volver a aplicar no hace nada
+===END
+===FILE db/file_test.go
+--- 39 39
+		// el archivo existe y no es JSON en texto plano
+--- 65 65
+		// índice único aplicado tras recargar
+--- 69 69
+			// status no es único en este test — solo se comprueba que la inserción funciona
+--- 103 103
+		raw[10] ^= 0xff // invertir el byte de schema_version
+--- 134 134
+		// flush limpio: no hace falta archivo, pero dirty=true al crear, así que se escribe
+--- 170 170
+		// el índice único sigue funcionando
+--- 174 174
+		// anidados preservados
+===END

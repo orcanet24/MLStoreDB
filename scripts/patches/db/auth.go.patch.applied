@@ -1,0 +1,148 @@
+===FILE db/auth.go
+--- 14 17
+// Colecciones del sistema (RBAC, M4). Se crean de forma perezosa en la primera llamada
+// a la API de administración — nunca en New()/Open — para que Collections() siga limpio
+// hasta que existan usuarios. Están ocultas para Collections() y no son accesibles por el
+// CRUD genérico (las APIs de administración solo escriben en ellas por caminos dedicados).
+--- 22 22
+// KDF de contraseñas (argon2id, cadena estilo PHC). Los parámetros siguen LightKDF.
+--- 30 31
+// Permission es una entrada de la lista de acceso de un rol (se guarda en documentos de _roles).
+// La colección "*" coincide con todas las colecciones que no son del sistema.
+--- 39 39
+// RoleInfo es un rol tal y como se expone en la interfaz de administración (admin M9).
+--- 45 47
+// Session es un principal autenticado con una instantánea de los permisos de rol
+// resueltos en el momento de Authenticate. Se obtiene con Store.Authenticate.
+// Seguro para uso concurrente.
+--- 54 54
+	expires time.Time // cero = nunca caduca
+--- 55 55
+	system  bool      // principal hookBypass (M5a): de confianza, no está en el mapa de sesiones
+--- 58 58
+// User devuelve el nombre de usuario autenticado.
+--- 61 61
+// Roles devuelve una copia de los nombres de rol resueltos en Authenticate.
+--- 64 64
+// Token devuelve el token de sesión (para Store.Revoke).
+--- 67 67
+// Revoke invalida esta sesión de inmediato.
+--- 70 70
+// --- comprobaciones RBAC (el llamador debe tener s.mu) ---
+--- 76 76
+// authActiveLocked indica si la aplicación de RBAC está activa (existe al menos 1 usuario).
+--- 82 83
+// AuthActive indica si la aplicación de RBAC está activa (existe al menos 1 usuario).
+// Mientras es false, la API cruda del Store está totalmente abierta (modo permisivo por defecto).
+--- 90 91
+// checkReadLocked controla una lectura. sess nil = API cruda del Store (permitida solo
+// mientras la autenticación está inactiva). No nil = sesión válida con permiso de lectura.
+--- 111 112
+// checkWriteLocked controla una escritura. Las colecciones del sistema nunca son
+// escribibles desde el CRUD genérico (evita documentos de usuario falsos / manipulación de hashes).
+--- 132 133
+// validLocked: no caducada y aún registrada (Revoke elimina la entrada).
+// Las sesiones system (hookBypass) siempre son válidas. El llamador tiene s.mu.
+--- 169 169
+// fieldDenySet une los FieldDeny de los permisos que coinciden con coll (o con "*").
+--- 186 186
+// redactDoc elimina los campos denegados de una copia propia.
+--- 193 195
+// filterTouchesFields indica si el filtro referencia algún campo denegado
+// (claves de primer nivel + recursión en $and/$or/$nor/$not) — bloquea la
+// sondeabilidad de valores ocultos mediante predicados de Count/Find.
+--- 224 224
+// CanWrite indica si la sesión puede escribir en coll (interfaz de admin M9).
+--- 227 227
+// CanRead indica si la sesión puede leer de coll (interfaz de admin M9).
+--- 230 230
+// --- API de datos de la sesión (con comprobación de permisos + redacción fieldDeny) ---
+--- 232 232
+// Get devuelve una copia del documento con los campos de fieldDeny eliminados.
+--- 237 238
+// Find es Store.Find con los permisos de la sesión (se prohíben los filtros que
+// tocan fieldDeny y se redactan los campos denegados en los resultados).
+--- 243 243
+// Count es Store.Count con los permisos de la sesión.
+--- 248 248
+// Insert es Store.Insert con permiso de escritura.
+--- 256 256
+// Upsert es Store.Upsert con permiso de escritura.
+--- 264 264
+// Update es Store.Update con permiso de escritura.
+--- 272 272
+// UpdateFields es Store.UpdateFields con permiso de escritura (wire M8).
+--- 280 280
+// EnsureIndex es Store.EnsureIndex con permiso de escritura sobre coll (wire M8).
+--- 288 288
+// DropIndex es Store.DropIndex con permiso de escritura sobre coll (wire M8).
+--- 296 296
+// ListIndexes es Store.ListIndexes con permiso de lectura sobre coll (wire M8).
+--- 307 307
+// Collections es Store.Collections filtrado por permiso de lectura (wire M8).
+--- 321 321
+// CreateCollection es Store.CreateCollection con permiso de escritura (wire M8).
+--- 326 326
+// DropCollection es Store.DropCollection con permiso de escritura (wire M8).
+--- 331 331
+// Delete es Store.Delete con permiso de escritura.
+--- 339 339
+// ExportCSV es Store.ExportCSV con permiso de lectura (+ campos de fieldDeny ocultos).
+--- 344 344
+// --- APIs de administración (bootstrap de confianza / código privilegiado; sin control de sesión) ---
+--- 346 348
+// CreateUser guarda un usuario en _users (creada de forma perezosa) con un hash de
+// contraseña argon2id. Los roles deben existir ya (CreateRole). El primer usuario
+// activa el RBAC: a partir de ahí la API de datos cruda del Store devuelve ErrUnauthorized.
+--- 380 380
+		c := s.coll(usersColl) // perezoso: _users solo aparece ahora
+--- 400 400
+// CreateRole guarda un rol (crea _roles de forma perezosa) con su lista de permisos.
+--- 442 442
+// UserInfo es un usuario tal y como se expone en la interfaz de administración (sin hash de contraseña).
+--- 448 448
+// ListUsers devuelve todos los usuarios (API de administración de confianza). Admin M9.
+--- 474 474
+// ListRoles devuelve todos los roles con sus permisos (administración de confianza). Admin M9.
+--- 503 505
+// SystemSession devuelve una Session de confianza con permisos comodín (equivalente
+// al hookBypass de M5a). La usa la consola de administración cuando el RBAC está
+// inactivo (modo permisivo) para que la API cruda del Store funcione sin login.
+--- 510 513
+// ResetAuth borra todas las credenciales (usuarios, roles, sesiones activas) sin tocar
+// ninguna colección de datos. Después, AuthActive() devuelve false y la API cruda del
+// Store vuelve a funcionar sin autenticación (modo permisivo). Las credenciales se borran
+// como registros DEL reales para que no resuciten al reabrir. Admin M9.
+--- 537 538
+// deleteRecordLocked escribe un registro DEL para id en coll sin comprobar permisos.
+// El llamador debe tener s.mu (escritura). El DEL solo se encola si hay respaldo en archivo.
+--- 562 562
+// DeleteUser elimina un usuario y revoca sus sesiones (administración de confianza). Admin M9.
+--- 589 591
+// SetUserRoles reemplaza in situ la lista de roles de un usuario existente: se conservan
+// el hash de contraseña y los demás campos, y solo las sesiones de los roles afectados
+// necesitan reautenticarse en el próximo login (administración de confianza).
+--- 634 634
+// DeleteRole elimina un rol si ningún usuario lo referencia (administración de confianza). Admin M9.
+--- 666 667
+// ChangePassword vuelve a calcular el hash de la contraseña de username y revoca
+// todas las sesiones de ese usuario.
+--- 705 705
+// Revoke elimina una sesión por token (no hace nada si es desconocido o vacío).
+--- 715 717
+// Authenticate verifica usuario/contraseña y devuelve una Session.
+// Tanto un usuario desconocido como una contraseña incorrecta devuelven ErrUnauthorized (sin enumerar usuarios).
+// Las sesiones se purgan de forma perezosa aquí (las entradas caducadas se recolectan en cada login).
+--- 757 757
+	} // ttl < 0 → nunca caduca
+--- 765 765
+// purgeExpiredLocked descarta las sesiones caducadas. El llamador tiene s.mu (escritura).
+--- 775 775
+// resolveRolePerms carga y aplana los permisos de los nombres de rol indicados.
+--- 800 800
+// --- hash de contraseñas (cadena PHC de argon2id) ---
+--- 822 822
+// verifyPassword comprueba pw contra una cadena argon2id estilo PHC.
+--- 846 846
+// --- analizadores de campos de documento (forma en RAM o forma tras pasar por JSON) ---
+===END

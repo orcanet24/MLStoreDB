@@ -1,0 +1,271 @@
+===FILE db/store.go
+--- 15 15
+// Document es un objeto JSON con un campo _id de tipo string obligatorio.
+--- 24 25
+// Store es un almacén de documentos JSON en memoria; opcionalmente respaldado
+// por un archivo cifrado (M4). Seguro para uso concurrente.
+--- 31 31
+// respaldo en archivo (path vacío = solo RAM)
+--- 44 44
+// runtime de M5
+--- 49 49
+// flush no bloqueante (punto 3)
+--- 50 50
+	flushMu  sync.Mutex // serializa writeState (E/S) sin tener tomado mu
+--- 51 51
+	dirtyGen uint64     // lo incrementa markDirty; el flush limpia dirty solo si no cambió
+--- 52 52
+	machine  []byte     // id de máquina para la KEK resuelto en Open (persiste entre Flush)
+--- 54 54
+// registro de log / caché de M1
+--- 55 55
+	sawFile         bool // existe un cuerpo v2 duradero (habilita append + DELs)
+--- 56 56
+	v1Migration     bool // se cargó un estado v1 o sospechoso → el próximo flush es reescritura completa
+--- 57 57
+	compactForce    bool // el próximo prepareFlush es una reescritura completa
+--- 58 58
+	flushInProgress bool // instantánea tomada; los borrados deben encolar DELs
+--- 64 64
+	noEvict         atomicBool // retiene la expulsión (ventana de migración v1)
+--- 65 65
+	kek             []byte     // KEK en caché (Argon2 una vez por credenciales)
+--- 67 67
+// contrapresión de M3: mutaciones desde la última instantánea de flush duradera.
+--- 68 68
+	writeSeq   uint64 // lo incrementa markDirty
+--- 69 69
+	durableSeq uint64 // writeSeq incluido en el último writeState correcto
+--- 72 72
+// RBAC de M4: token → Session viva. Protegido por mu. Vacío hasta Authenticate.
+--- 75 75
+// hooks de M5a: registros + worker FIFO asíncrono acotado.
+--- 83 83
+// triggers declarativos de M5b: _triggers → registro de hook de M5a.
+--- 86 86
+	triggerHooks   map[string]uint64 // _id del trigger → id de hook de M5a
+--- 88 88
+// grafo de M6: instantáneas de adyacencia CSR para las colecciones edges.*.
+--- 92 92
+// atomicBool envuelve atomic.Bool para el flag de retención de expulsión.
+--- 98 98
+// New crea un almacén en memoria vacío (schemaVersion 0 = necesita migraciones).
+--- 117 119
+// EnsureIndex crea (o no hace nada si ya es idéntico) un índice sobre coll.
+// fields es 1..N (compuesto). unique impone un documento por combinación de claves.
+// En una colección no vacía se construye desde los documentos existentes; los conflictos de único → ErrDuplicate.
+--- 162 162
+// DropIndex elimina el índice que coincide con fields (sensible al orden).
+--- 187 187
+// ListIndexes devuelve los metadatos de los índices de coll (slice vacío si no hay ninguno o no existe).
+--- 202 203
+// applyIndexes tras un cambio de documento: quita las entradas antiguas (si old no es nil)
+// y agrega las nuevas. Si falla un único al agregar, restaura las entradas antiguas.
+--- 217 217
+// rollback: eliminar lo agregado para newDoc y restaurar old
+--- 236 236
+// maxDocBytes es NF1: 1 MB por documento (DESIGN §3.1).
+--- 239 240
+// docID extrae el _id del documento. Si falta o está vacío ⇒ ULID automático (DESIGN §3.1).
+// Muta el documento cuando lo genera.
+--- 255 255
+// checkDocSize rechaza documentos de más de 1MB (NF1) antes de insert/upsert.
+--- 257 257
+// camino rápido: serializar solo si el mapa es grande; comprobar siempre por seguridad
+--- 268 268
+// clone copia en profundidad el documento para que quien llama no pueda mutar los documentos guardados (también los anidados).
+--- 277 279
+// cloneShallow copia solo el primer nivel. Es seguro para el rollback de Update y para
+// la instantánea de índices: Update reemplaza claves de primer nivel y nunca muta
+// valores anidados in situ, así que las referencias anidadas compartidas siguen intactas para extractIndexRows(old).
+--- 288 289
+// cloneValue copia en profundidad valores tipo JSON (mapas/slices); los escalares se devuelven tal cual.
+// map[string]any se mantiene como map[string]any (no Document) para que las aserciones de tipo sigan funcionando.
+--- 325 325
+// Insert agrega el documento; falla si falta el _id, ya existe, hay conflicto de único o supera 1MB.
+--- 333 334
+// insertDoc es Insert/Session.Insert con sesión RBAC opcional (M4).
+// sess nil = API cruda del Store (permitida solo mientras no existan usuarios).
+--- 339 339
+// insertDocFrame ejecuta los hooks before/after alrededor de la aplicación con bloqueo (M5a).
+--- 391 391
+// previewWrite comprueba los permisos bajo RLock (fase de hook before; sin efectos secundarios).
+--- 398 398
+// previewMissing devuelve errIfPresent cuando el id ya existe (fase previa a los hooks).
+--- 410 410
+// previewDoc clona el documento actual o devuelve ErrNotFound (fase de hook before).
+--- 425 425
+// Upsert reemplaza o crea el documento con el _id indicado (el id gana sobre doc["_id"]).
+--- 449 449
+			old, _ = s.previewDoc(coll, id) // nil cuando se está creando
+--- 497 497
+// Update fusiona superficialmente las claves de primer nivel de patch en el documento existente.
+--- 505 508
+// UpdateFields es Update más eliminaciones explícitas de campos de primer nivel (wire M8:
+// $unset de Mongo / diferencias de reemplazo). Las eliminaciones se aplican a la vista
+// previa fusionada antes de ejecutar los hooks (los hooks ven la forma final) y acaban en
+// el mismo camino updateApply, así que los triggers/hooks asíncronos se comportan igual que en un Update.
+--- 532 533
+// Los hooks ven la vista previa fusionada (old + patch) para que set/unset actúen
+// sobre la forma final; después se calcula la diferencia de vuelta a patch + eliminaciones.
+--- 611 612
+// COW: se construye el nuevo mapa aparte para que un fallo de tamaño/índice deje
+// intacto el mapa residente vivo (sin rollback in situ).
+--- 637 637
+// Delete elimina el documento por _id.
+--- 695 695
+// Expulsar del registro de caché.
+--- 704 705
+// Guarda contra resurrección: registrar un DEL cuando existe un cuerpo duradero
+// o la instantánea de un flush podría incluir ya este documento.
+--- 714 717
+// waitBackpressureLocked bloquea mientras hay un flush en curso y el número de
+// mutaciones desde la última instantánea duradera supera Options.MaxPendingWrites.
+// El llamador tiene s.mu (escritura). Wait libera s.mu para que el flush pueda terminar.
+// No hace nada cuando MaxPendingWrites es 0 (comportamiento heredado, sin límite).
+--- 728 730
+// Get devuelve una copia del documento, o ErrNotFound.
+// Cuando existe al menos 1 usuario (M4), las lecturas crudas del Store devuelven
+// ErrUnauthorized: usa Authenticate → Session.Get.
+--- 756 756
+// FindOptions controla la forma del resultado (sort/skip/limit desde M1; proyección M2).
+--- 758 758
+	Sort       map[string]int // 1 ascendente, -1 descendente
+--- 761 761
+	Projection []string // campos de primer nivel a devolver (+ _id siempre); vacío = todos
+--- 764 769
+// Find usa una búsqueda por índice cuando es posible (igualdad/$in sobre un campo indexado);
+// si no, recorre toda la colección coll. Un filtro nil/vacío devuelve todos los documentos.
+// Operadores de filtro: ver filter.go ($eq $ne $gt $gte $lt $lte $in $nin $regex $exists $and $or $not $nor).
+// Los resultados se ordenan por _id cuando no se indica Sort (determinista).
+// Solo se clona la página devuelta (las referencias se mantienen durante sort/skip/limit).
+// Cuando existe al menos 1 usuario (M4), las lecturas crudas del Store devuelven ErrUnauthorized.
+--- 780 780
+// fieldDeny de la sesión: prohíbe filtros que sondean campos ocultos (M4).
+--- 793 793
+// Se mantienen punteros al almacén durante el match/sort; solo se clona la página de salida.
+--- 806 807
+// exact ⇒ los candidatos ya cumplen el filtro (sin volver a evaluar).
+// !exact ⇒ se vuelve a evaluar cada documento cargado (rango / prefijo parcial).
+--- 826 826
+// Orden: atajo con el orden del índice cuando el campo de ordenación == campo del índice de rango.
+--- 838 838
+// Orden base determinista por _id solo cuando no hay Sort de usuario (o se hará una ordenación completa después).
+--- 862 862
+// Se clona solo lo que recibe quien llama (la página, no todo el conjunto de coincidencias).
+--- 891 893
+// sortByPartial ordena los documentos según sortSpec. Si need>0 y need<n y la especificación
+// tiene una sola clave, usa un max-heap acotado de tamaño need (O(n log k)); si no, ordenación completa.
+// Tras una ordenación parcial, solo los primeros min(need,n) elementos quedan correctamente ordenados.
+--- 904 904
+// max-heap de (clave, doc) que conserva los "need" mejores según dir
+--- 912 912
+// se extraen en orden a docs[0:need]; el resto queda como estaba (cola desordenada)
+--- 919 919
+// docHeap conserva los "need" mejores documentos: para asc (dir>0) expulsa el mayor; para desc, el menor.
+--- 923 923
+	dir  int // 1 ascendente, -1 descendente
+--- 928 929
+// betterKey indica si la clave a es preferible a b (a debe conservarse en lugar de b).
+// Ascendente: la clave menor es mejor; Descendente: la clave mayor es mejor.
+--- 938 938
+// worstIdx devuelve el índice del peor elemento conservado (candidato a expulsar).
+--- 942 942
+// si keys[wi] es mejor que keys[i], entonces i es peor
+--- 955 955
+// pop elimina y devuelve el peor elemento conservado.
+--- 964 964
+// planResult describe cómo usó el planificador los índices para un filtro.
+--- 967 972
+	order      []string // IDs en orden de índice cuando los produjo una búsqueda por rango
+	orderField string   // campo indexado correspondiente a order (ordenar por índice)
+	exact      bool     // no hace falta volver a evaluar
+	used       bool     // se usó al menos una búsqueda por índice
+	index      []string // campos de índice usados (Explain)
+	covered    []string // campos de filtro de primer nivel cubiertos por búsquedas de igualdad
+--- 975 975
+// fieldPlan es un campo de filtro de primer nivel clasificado por el planificador.
+--- 982 982
+	blocked bool // operación lógica o condición no soportada
+--- 985 988
+// planCandidates busca índices para igualdad/$in (simple + prefijo compuesto) y
+// rangos sobre el primer campo indexado. Los rangos siempre ponen exact=false para
+// que Find vuelva a evaluar (tipos cruzados / predicados residuales). Las operaciones
+// lógicas fuerzan la reevaluación pero no bloquean las búsquedas de otros campos.
+--- 995 995
+// Clasificar los campos de primer nivel.
+--- 1013 1013
+// Marcar los campos consumidos por una búsqueda de igualdad compuesta de varios campos.
+--- 1016 1016
+// Paso 1: índices compuestos — igualdades iniciales de un solo valor.
+--- 1047 1047
+// Exacto solo si todos los campos cubiertos están servidos por igualdad; los rangos/bloqueados limpian exact más abajo.
+--- 1049 1049
+// Paso 2: igualdad y rangos restantes de un solo campo.
+--- 1090 1090
+// Conservar el orden del rango filtrado por los candidatos existentes.
+--- 1103 1103
+				res.exact = false // los rangos siempre vuelven a evaluar
+--- 1112 1112
+// Reconciliar los IDs ordenados con el conjunto final de candidatos (la igualdad pudo quitar algunos).
+--- 1122 1122
+// Todos los campos de primer nivel deben estar cubiertos por igualdad para que el plan sea exacto.
+--- 1129 1129
+// singleEqualityFor devuelve un único valor literal de igualdad para un campo a partir de los planes.
+--- 1139 1140
+// seekEqualityField busca $eq/literal/$in sobre field mediante un índice de un solo campo
+// o como primer campo de un índice compuesto.
+--- 1151 1151
+// Índice compuesto con field como componente inicial ($in → unión de búsquedas por prefijo).
+--- 1183 1184
+// rangeValues extrae una conjunción pura de rango (solo $gt/$gte/$lt/$lte)
+// de la condición de un campo. Si se mezcla con otros operadores → no indexable como rango.
+--- 1236 1236
+// ExplainResult informa de cómo ejecutaría Find un filtro (punto 5).
+--- 1249 1249
+// Explain devuelve el plan de consulta del filtro sin ejecutar el match sobre los documentos.
+--- 1286 1286
+// equalityValues devuelve valores literales para field: value, { $eq: v } o { $in: [...] }.
+--- 1316 1316
+// project conserva solo _id + los campos de primer nivel indicados (copia en profundidad de los valores).
+--- 1333 1335
+// Count devuelve el número de documentos que coinciden sin clonarlos.
+// Igualdad/$in puros sobre campos indexados ⇒ O(1)/O(k) desde el índice (sin recorrido).
+// Cuando existe al menos 1 usuario (M4), las lecturas crudas del Store devuelven ErrUnauthorized.
+--- 1357 1357
+// Camino rápido: igualdad/$in de un solo campo totalmente cubierto por un índice.
+--- 1386 1387
+// countIndexed resuelve Count cuando el filtro es un único campo de primer nivel con
+// solo igualdad o $in, y ese campo tiene un índice de un solo campo.
+--- 1404 1404
+// $in / igualdad multivalor: sumar por valor (las claves únicas no se solapan entre valores)
+--- 1414 1415
+// Collections lista los nombres de colecciones (ordenados). Las colecciones del sistema
+// (_users/_roles, M4) quedan ocultas.
+--- 1430 1430
+// SchemaVersion devuelve la versión del esquema del almacén.
+--- 1437 1437
+// Path devuelve la ruta del archivo de respaldo ("" en almacenes en memoria). Admin M9.
+--- 1444 1446
+// CreateCollection registra una colección vacía (wire M8). Sobrevive a flush/reopen
+// mediante el registro META incluso sin documentos. Devuelve ErrExists cuando la
+// colección ya existe.
+--- 1471 1476
+// DropCollection elimina una colección y todos sus documentos (wire M8).
+// Cada documento pasa por el camino normal de borrado (registros DEL, hooks,
+// expulsión de caché); después la definición de la colección sale del mapa y el
+// siguiente META del flush deja de listarla. Los registros DOC/IDX obsoletos de
+// commits anteriores se ignoran al reabrir (el escaneo v2 está condicionado por META).
+// Los hooks pueden vetar borrados individuales, dejando la colección parcialmente eliminada.
+--- 1521 1521
+// matchEqual se eliminó — lo sustituye match() en filter.go (M2).
+--- 1524 1524
+// Los números que vienen de JSON son float64; se acepta comparación cruzada int/float.
+--- 1558 1559
+// Desempate por _id primero (prioridad más baja — las ordenaciones estables posteriores lo mantienen para claves iguales).
+// Después las claves de usuario en orden alfabético inverso para que gane la primera clave alfabética.
+--- 1568 1568
+// precalcular las claves de esta pasada
+--- 1617 1617
+// null/ausente al final: nil < todo
+===END

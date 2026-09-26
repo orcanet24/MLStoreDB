@@ -1,0 +1,55 @@
+===FILE db/cache.go
+--- 7 8
+// docEntry es una ranura de documento dentro de una colección: los metadatos
+// están siempre presentes y la carga puede estar "fría" (docP == nil), en cuyo
+// caso se relee del log de registros.
+--- 10 10
+	docP   atomic.Pointer[Document] // nil = frío (hay que cargarlo del archivo)
+--- 11 11
+	recOff atomic.Int64             // offset del registro; -1 = nunca escrito
+--- 12 12
+	recLen atomic.Int32             // longitud completa del registro en recOff
+--- 13 13
+	dirty  atomic.Bool              // mutado desde el último flush correcto
+--- 14 14
+	refBit atomic.Bool              // bit de reloj de segunda oportunidad
+--- 15 15
+	size   atomic.Int64             // estimación de la carga residente (bytes)
+--- 17 17
+// mutGen solo se accede bajo Store.mu.
+--- 18 18
+	mutGen uint64 // dirtyGen cuando se puso dirty por última vez
+--- 30 31
+// resident devuelve el documento en memoria (lo carga del archivo si está frío).
+// El llamador debe tener tomado Store.mu.
+--- 40 41
+// loadEntry materializa e.docP desde el log de registros si está frío.
+// El llamador debe tener tomado Store.mu. Puede hacer E/S de archivo (recorridos completos / aciertos fríos).
+--- 77 78
+// markEntryClean limpia dirty tras un flush correcto si no se ha vuelto a mutar.
+// El llamador debe tener tomado Store.mu.
+--- 85 85
+// CacheStats informa de la residencia de la caché de páginas (M1).
+--- 95 95
+// CacheStats devuelve la ocupación actual de la caché. Seguro con uso concurrente.
+--- 123 124
+// cacheAdmit registra e como residente respetando el presupuesto de bytes (mejor esfuerzo).
+// Nunca toma Store.mu (el llamador ya lo tiene).
+--- 139 139
+// evictLocked descarta entradas limpias hasta quedar por debajo del presupuesto. El llamador tiene cacheMu.
+--- 143 143
+			return // sin límite (CacheBytes < 0)
+--- 145 145
+// No hay expulsión para almacenes solo RAM ni mientras hay una reescritura v1 pendiente.
+--- 151 151
+// Fase A: limpio + refBit ya en claro.
+--- 165 165
+// Fase B: segunda oportunidad — limpiar los refBits.
+--- 174 174
+				return // todo lo que queda está sucio
+--- 179 180
+// purgeCollCacheLocked quita todas las entradas de c del registro de residentes.
+// El llamador debe tener Store.mu (escritura) — toma cacheMu por dentro (s.mu → cacheMu).
+--- 197 197
+// evictEntryLocked libera la carga residente. El llamador tiene cacheMu.
+===END

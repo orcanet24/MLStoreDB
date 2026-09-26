@@ -1,0 +1,41 @@
+===FILE db/machineid.go
+--- 13 17
+// InstallIDFileName es el archivo de identidad por instalación. Vive JUNTO AL archivo
+// de la base de datos (nunca dentro de él) y contiene un ULID aleatorio generado en el
+// primer uso. Pasarlo como Options.MachineID liga la KEK del archivo a esta instalación,
+// así que un .mlstore copiado no se puede descifrar en otro sitio aunque se disponga del
+// material de la clave maestra.
+--- 22 22
+// validMachineID acepta letras, dígitos y - _ . (los ULID canónicos son válidos).
+--- 44 63
+// ResolveMachineID devuelve la identidad de máquina que hay que usar como
+// Options.MachineID para la base de datos en dbPath:
+//
+//  1. si se indica una explícita no vacía → se valida y se devuelve tal cual (tests /
+//     anulación explícita; no se lee ni se escribe el archivo de id de instalación).
+//  2. en caso contrario, el archivo de id de instalación junto a dbPath: si existe, se
+//     valida y se devuelve (estable entre reinicios y actualizaciones); si no, se genera
+//     un ULID aleatorio nuevo, se persiste de forma atómica y se devuelve.
+//
+// Llámalo una vez en la instalación/configuración, pasa el resultado como
+// Options.MachineID en todos los Open/OpenWithLock posteriores de esa base de datos y
+// registra el valor en el servidor de licencias (es a la vez el vínculo por cliente y la
+// copia de recuperación si alguna vez se pierde el archivo de identidad).
+//
+// Las bases de datos existentes creadas con el vínculo MachineGuid por defecto siguen
+// abriéndose con Options.MachineID vacío — no cambies un archivo existente a un id de
+// instalación sin un plan de rotación de claves o reescritura.
+//
+// Varios archivos de base de datos en el mismo directorio comparten intencionadamente
+// una única identidad de instalación (una identidad por directorio de datos).
+--- 77 79
+				// Vacío puede significar (a) un creador concurrente aún entre el O_EXCL y el
+				// WriteString, o (b) un archivo truncado o corrupto. Se reintenta brevemente
+				// para (a); se relee cuando el create→write se estabiliza.
+--- 106 108
+		// Primer uso de esta instalación: crear de forma exclusiva para que se genere
+		// exactamente una identidad, incluso con creadores concurrentes. Los que pierden
+		// adoptan el id del ganador (un breve bucle de lectura cubre la ventana create→write).
+--- 131 131
+		// Sistema de archivos sin soporte de O_EXCL: reemplazo de último recurso + bucle de convergencia.
+===END

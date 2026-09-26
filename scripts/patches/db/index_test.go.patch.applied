@@ -1,0 +1,34 @@
+===FILE db/index_test.go
+--- 14 14
+		// idempotente
+--- 37 37
+		// volver a insertar el mismo _id sigue dando ErrDuplicate (ya existe)
+--- 42 42
+		// otro código sí funciona
+--- 56 56
+		// no queda ningún índice a medio aplicar
+--- 73 73
+		// el documento 2 no cambia
+--- 78 78
+		// actualizar a un valor libre funciona
+--- 92 92
+		// upsert del mismo id con el mismo código es correcto
+--- 105 105
+		// el código A vuelve a estar libre
+--- 137 137
+		// el mismo par queda bloqueado
+--- 142 142
+		// otro segundo campo sí funciona
+--- 158 158
+		// se usó el planificador — el resultado debe ser igual a la semántica de recorrido completo (ya cubierto por otros tests)
+--- 212 212
+			// null y ausente son ambos centinela → deberían chocar en único
+--- 215 215
+		// el no único está bien
+--- 223 223
+		// el eq implícito con null también coincide con ausente (semántica de match)
+--- 234 234
+			// b aparece en ambos → choque de único
+--- 240 240
+		// el índice se mantiene: el borrado libera b para un documento
+===END

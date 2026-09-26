@@ -1,0 +1,146 @@
+===FILE db/index.go
+--- 14 14
+// IndexInfo describe un índice sobre una colección (para ListIndexes / persistencia).
+--- 20 21
+// ordEntry es una clave de índice distinta en orden ascendente: el valor crudo
+// del primer campo (para compareOrdered) más la clave codificada completa (desempate / enlace al hash).
+--- 27 30
+// index es un índice en memoria sobre una sola colección: un hash para igualdad
+// más un slice "ord" ordenado de forma perezosa para búsquedas por rango/prefijo
+// y para ordenar por índice.
+// No único: clave → conjunto de _id. Único: clave → un único _id.
+// mu protege entries/unique/ord (ensureOrd muta; Find puede tener s.mu.RLock).
+--- 35 38
+	entries  map[string]map[string]struct{} // clave → ids (no único)
+	unique   map[string]string              // clave → id (único)
+	ord      []ordEntry                     // claves distintas ordenadas por (valor del primer campo, clave)
+	ordDirty bool                           // requiere reordenar antes de la búsqueda binaria
+--- 39 41
+// matrix es la vista CSR plana de (ord × ids); solo deja de ser nil mientras se
+// sabe que coincide con entries/unique/ord (se fija en loadRows a partir de un CSR
+// válido y se limpia en cada mutación). Evita "map lookups" por clave + ordenación.
+--- 49 49
+		ordDirty: true, // construcción masiva: agregar todo y ordenar una sola vez en la 1.ª búsqueda
+--- 65 66
+// typeRank ordena los tipos para las búsquedas por rango: nil < números < string < bool < otros.
+// Entre tipos distintos nunca hay igualdad en rangos (estilo Mongo: sin orden entre tipos).
+--- 83 84
+// compareOrdered define un orden total sobre los valores del primer campo del índice:
+// primero el rango de tipo y luego compareValues dentro de los rangos numérico/string (bool: false < true).
+--- 107 107
+		return 0 // otros: sin orden entre valores; solo desempata la clave
+--- 120 120
+// ensureOrd ordena ord si está "sucio". El llamador debe tener tomado idx.mu.
+--- 129 131
+// addDoc indexa todas las filas de clave del docID. Si hay conflicto de único
+// devuelve ErrDuplicate y no aplica nada de forma parcial (el llamador no debe
+// haber borrado aún las entradas viejas, o debe hacer rollback).
+--- 140 140
+// Se preparan las claves primero para que los conflictos de "único" aborten limpio.
+--- 147 147
+			continue // misma clave dos veces en un documento (elementos repetidos de un array)
+--- 168 168
+// addKey asume que idx.mu ya está tomado.
+--- 188 189
+// Camino masivo (sucio): agregar y ordenar de forma perezosa en la próxima búsqueda.
+// Camino estable (limpio): insertar con búsqueda binaria para mantener ord ordenado sin ordenar todo.
+--- 202 202
+// removeDoc elimina todas las entradas de índice del docID usando los valores del documento dado.
+--- 240 240
+// Sin ordenar: recorrido lineal (evita forzar una ordenación a mitad de lote).
+--- 256 256
+// Respaldo por desajuste de valor (no debería ocurrir): recorrido lineal por clave
+--- 265 266
+// lookupIDs devuelve el conjunto de _id para valores de igualdad en el índice
+// (clave completa cuando len(values)==len(Fields); el planificador MVP no usa coincidencias parciales).
+--- 285 285
+// countKey devuelve cuántos documentos coinciden con la clave completa sin construir un conjunto de IDs.
+--- 299 300
+// covers indica si están presentes todas las filas de índice de doc/docID.
+// Se usa al hacer flush para marcar el flag "sospechoso" cuando el estado del índice está obsoleto.
+--- 320 322
+// seekPrefix devuelve los documentos cuya clave codificada empieza por el prefijo
+// de values (values debe ser un subconjunto inicial de Fields). Con la longitud
+// completa es una búsqueda exacta por clave; las parciales se acotan usando ord sobre el primer campo.
+--- 337 337
+// banda sin orden: recorrido completo de las claves distintas
+--- 410 410
+// rangeBound describe una conjunción pura de $gt/$gte/$lt/$lte sobre un único campo.
+--- 418 419
+// seekRange devuelve los documentos cuyo primer campo del índice está en [lo,hi]
+// (solo dentro de la misma banda de rango de tipo). Los IDs van en orden ascendente de ord.
+--- 424 424
+// Se determina el rango de tipo objetivo a partir de los límites.
+--- 429 429
+			return nil // ningún valor puede estar en ambas bandas
+--- 440 440
+// nil / bool / otros no se ordenan con compareOp (comparableTypes es false)
+--- 444 444
+// Búsqueda binaria del borde inferior dentro de la banda [rank].
+--- 467 467
+			return false // aún dentro de la banda; "end" avanza más allá abajo
+--- 475 475
+// Con solo límite lo: "end" debe parar al final de la banda de rango.
+--- 481 481
+// Con solo límite hi: "start" debe empezar al inicio de la banda de rango.
+--- 491 493
+// collectRange recoge los ids de las filas de ord [start,end), prefiriendo la matrix
+// CSR plana cuando está sincronizada (M2) y, si no, el camino por mapas de clave.
+// El llamador tiene idx.mu (y ord ya debe estar ordenado si se usa la matrix).
+--- 519 519
+// idsSortedForKey devuelve los ids de documento de una clave en orden ascendente (determinista).
+--- 533 533
+// orderedIDs recorre todo el índice en orden (valor, _id) — ordenar por índice.
+--- 558 558
+// idxRow es una fila de clave de índice persistida (M1: serialización completa en cada flush).
+--- 565 567
+// csrMatrix es la vista CSR plana (M2) de un índice: la fila i ↔ ord[i],
+// Indices[Indptr[i]:Indptr[i+1]] son ordinales de columna dentro de Ids (diccionario de docID).
+// Checksum es CRC32-C sobre keys|indptr|indices|ids para validar al cargar.
+--- 569 570
+	Keys     []string `json:"keys"`   // claves distintas en orden de ord (etiquetas de fila)
+	Vals     []any    `json:"vals"`   // valores del primer campo (datos de fila para rangos)
+--- 573 573
+	Ids      []string `json:"ids"` // diccionario de columnas: docID
+--- 577 577
+// idxPayload es el texto plano de un registro IDX.
+--- 583 583
+	CSR    *csrMatrix `json:"csr,omitempty"` // M2: camino de carga principal
+--- 586 587
+// serialize toma una instantánea de las filas del índice en orden de ord para
+// persistirlas y embebe la matrix CSR (M2). Rows queda como respaldo si falla el checksum del CSR.
+--- 638 639
+// Construida 1:1 desde el recorrido de ord — sirve como vista plana viva hasta la
+// siguiente mutación (addKey/removeKey limpian idx.matrix).
+--- 645 645
+// computeChecksum es CRC32-C sobre los campos estructurales de la matrix.
+--- 670 670
+// valid comprueba la coherencia estructural y que el checksum coincida.
+--- 698 700
+// loadRows reconstruye el índice en memoria. M2: prefiere la matrix CSR cuando su
+// checksum valida; si no, recurre a Rows; vacío/corrupto → error (camino "eager").
+// Filas únicas con más de 1 id → ErrDuplicate (el camino de reparación "eager" lo resuelve).
+--- 739 740
+// loadCSR materializa entries/unique/ord desde una matrix ya validada y mantiene
+// idx.matrix viva para búsquedas planas por rango/orden. El llamador tiene idx.mu.
+--- 772 774
+// Se conserva la matrix como vista plana — las filas de ord se alinean 1:1 con
+// m.Keys solo si no se saltaron claves vacías. Se reajusta indptr guardando una
+// matrix cuyas Keys coincidan con el ord conservado (descartando huecos únicos vacíos).
+--- 779 780
+// alignToOrd devuelve una matrix cuyo número de filas coincide con ord (descarta
+// las claves que loadCSR saltó: filas únicas vacías / conjuntos no únicos vacíos).
+--- 810 810
+// errIdxMismatch indica que la definición del índice en META y la carga IDX no coinciden (respaldo "eager").
+--- 813 814
+// extractIndexRows construye una fila []any por cada combinación de claves del índice.
+// Los arrays de primer nivel se expanden (se indexa cada elemento); ausente/null → centinela nil.
+--- 825 825
+// un array vacío se indexa como nil (estilo Mongo: no hay elementos)
+--- 849 849
+// encodeIndexKey une los valores de campo con \x1f (clave compuesta, DESIGN §4.3).
+--- 860 860
+		return "u:" // centinela de ausente/null
+--- 888 888
+// sameFields indica si dos listas de campos son idénticas (sensible al orden).
+===END

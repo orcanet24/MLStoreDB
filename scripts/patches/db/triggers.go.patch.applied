@@ -1,0 +1,51 @@
+===FILE db/triggers.go
+--- 10 10
+// triggersColl guarda las definiciones declarativas de triggers (colección del sistema M5b).
+--- 13 23
+// TriggerAction es un paso declarativo. Tipos:
+//
+//	set     — fusiona Fields en el documento vivo (before: muta Doc; after: self-Update)
+//	unset   — elimina Names del documento (solo eventos before_*)
+//	insert  — inserta Doc (con plantillas $get) en Collection (_id automático si falta)
+//	update  — aplica el patch Set al id destino (el destino debe existir)
+//	upsert  — reemplaza/aplica Set en el id destino
+//	delete  — elimina el id destino
+//
+// Plantilla: cualquier valor {"$get":"field"} se resuelve contra el Doc del evento;
+// {"$get":"old.field"} se resuelve contra Old.
+--- 27 27
+	ID         any            `json:"id,omitempty"` // string o {"$get":...}
+--- 34 35
+// Trigger es una regla declarativa que se guarda en _triggers y se registra como un
+// hook de M5a (reutiliza la maquinaria de profundidad/ciclo/cola).
+--- 39 39
+	Collection string          `json:"collection"` // "" o "*" = todas
+--- 41 41
+	Async      bool            `json:"async,omitempty"` // solo after_*: se ejecuta en la cola FIFO
+--- 50 51
+// CreateTrigger valida, persiste en _triggers y registra el hook subyacente de M5a.
+// Devuelve el _id del trigger.
+--- 77 77
+// DeleteTrigger elimina el documento de _triggers y desengancha su hook.
+--- 94 94
+// ListTriggers devuelve todas las definiciones de trigger guardadas.
+--- 187 188
+// registerTriggerHook conecta un Trigger al registro de M5a.
+// El llamador tiene trigMu (y ya terminó ensureTriggersLoadedLocked).
+--- 209 209
+// ensureTriggersLoaded registra una sola vez (idempotente) los hooks de los triggers persistidos.
+--- 216 217
+// ensureTriggersLoadedLocked registra una sola vez los hooks de los triggers persistidos.
+// El llamador tiene trigMu.
+--- 248 248
+// runTrigger evalúa el filtro y las acciones dentro de un HookContext de M5a.
+--- 291 291
+			// after_*: aplicar como self-update (Doc puede ser un patch en eventos de update)
+--- 346 346
+// resolveMap resuelve en profundidad las plantillas {"$get":...} contra doc/old.
+--- 427 428
+// adminInsert escribe un documento de colección del sistema sin RBAC (solo APIs de administración).
+// No dispara hooks (las definiciones de trigger no son eventos).
+--- 455 455
+// adminDelete elimina un documento de colección del sistema sin RBAC (solo APIs de administración).
+===END

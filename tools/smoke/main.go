@@ -29,8 +29,8 @@ func main() {
 		panic(err)
 	}
 	if err := s.Insert("usuarios", db.Document{
-		"_id":   "u1",
-		"email": "ana@ejemplo.com",
+		"_id":    "u1",
+		"email":  "ana@ejemplo.com",
 		"perfil": db.Document{"nombre": "Ana"},
 	}); err != nil {
 		panic(err)

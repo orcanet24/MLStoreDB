@@ -1,0 +1,30 @@
+===FILE db/machineid_test.go
+--- 22 22
+		// La segunda llamada debe devolver el mismo id — sin regenerarlo.
+--- 31 31
+		// Y el archivo debe existir junto a la ruta de la base de datos con el mismo contenido.
+--- 52 52
+		// El modo explícito no debe crear el archivo de id de instalación.
+--- 56 56
+		// Se rechazan los caracteres inválidos.
+--- 101 101
+		// Los caracteres corruptos también son un error (nunca se re-vincula la KEK en silencio).
+--- 145 145
+		// Momento de configuración (instalador): resolver la identidad de instalación una vez.
+--- 165 165
+		// La misma instalación reabre sin problemas.
+--- 175 177
+		// Simulación de robo: el atacante copia el archivo de la base de datos al directorio
+		// de datos de OTRA máquina. Esa máquina resuelve su propia identidad de instalación
+		// (o su MachineGuid); la KEK nunca coincide, así que el descifrado es imposible.
+--- 183 183
+		// Resolver la identidad de la otra máquina (generada allí, no aquí).
+--- 193 193
+		// Incluso el respaldo del atacante con su máster conocido + su propio MachineGuid falla.
+--- 197 197
+		// ...y el mismo archivo sigue abriéndose en su instalación original.
+--- 212 214
+		// Documenta el conexionado previsto: Options.MachineID vacío significa "derivar del
+		// MachineGuid"; el valor por defecto a nivel de aplicación puede resolver antes el id
+		// de instalación. Aquí solo comprobamos que la salida de ResolveMachineID se acepta tal cual.
+===END

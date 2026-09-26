@@ -1,0 +1,25 @@
+===FILE db/options_test.go
+--- 18 18
+		// Cero y negativo recurren al valor por defecto.
+--- 23 23
+		// Los valores personalizados pasan tal cual.
+--- 31 31
+		// FindWorkers: 0 → GOMAXPROCS, negativo → 1 (serie), positivo → n.
+--- 42 42
+		// MaxPendingWrites: 0 = sin límite, los positivos pasan tal cual.
+--- 66 66
+		// Existe el archivo de bloqueo personalizado; el de por defecto no.
+--- 74 74
+		// Una segunda apertura con el MISMO bloqueo personalizado → bloqueada.
+--- 79 80
+		// Abrir el mismo archivo con el nombre de bloqueo POR DEFECTO debe funcionar: los
+		// bloqueos son independientes, es el caso de uso de varias bases por directorio.
+--- 97 97
+		// Crear un archivo limpio y válido.
+--- 109 109
+		// Repair funciona con el nombre de bloqueo personalizado.
+--- 118 118
+		// Repair queda bloqueado mientras otro proceso tiene ese bloqueo personalizado.
+--- 145 145
+		// Sin Flush/Close — solo el ticker rápido puede persistir esto.
+===END

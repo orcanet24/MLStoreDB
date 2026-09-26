@@ -52,10 +52,18 @@ func binaryDoc(raw []byte) db.Document {
 
 func (s *Server) cmdSaslStart(ctx *connCtx, arg any, cmd db.Document) db.Document {
 	if s.opts.AuthUser == "" {
-		return cmdErrorReply(errWire(18, "AuthenticationFailed", "Authentication failed."))
+		// El servidor no tiene credenciales de wire: cualquier intento de login falla aquí.
+		// Los clientes Mongo muestran este errmsg como "invalid credentials"/"Authentication
+		// failed", así que se explica la causa y se deja constancia en la consola del servidor.
+		s.logf("wire: saslStart rejected from %s: server started without -user/-pass "+
+			"(wire auth disabled) - no client can authenticate", ctx.remote)
+		return cmdErrorReply(errWire(18, "AuthenticationFailed",
+			"Authentication failed: this server has no wire credentials. "+
+				"Start mls-server with -user/-pass (and a user that exists in the database) to enable SCRAM-SHA-256"))
 	}
 	mech, _ := cmd["mechanism"].(string)
 	if mech != "SCRAM-SHA-256" {
+		s.logf("wire: unsupported authentication mechanism %q from %s", mech, ctx.remote)
 		return cmdErrorReply(errWire(2, "BadValue", "unsupported mechanism: "+mech))
 	}
 	payload, ok := binaryPayload(cmd["payload"])
@@ -76,6 +84,8 @@ func (s *Server) cmdSaslStart(ctx *connCtx, arg any, cmd db.Document) db.Documen
 		return cmdErrorReply(errWire(18, "AuthenticationFailed", "Authentication failed."))
 	}
 	if username != s.opts.AuthUser {
+		s.logf("wire: login rejected from %s: client asked for %q but the wire only accepts %q "+
+			"(-user); use that user or restart with -user %s", ctx.remote, username, s.opts.AuthUser, username)
 		return cmdErrorReply(errWire(18, "AuthenticationFailed", "Authentication failed."))
 	}
 	var saltRaw [16]byte
@@ -114,6 +124,7 @@ func (s *Server) cmdSaslStart(ctx *connCtx, arg any, cmd db.Document) db.Documen
 func (s *Server) cmdSaslContinue(ctx *connCtx, arg any, cmd db.Document) db.Document {
 	st := ctx.scram
 	if st == nil {
+		s.logf("wire: saslContinue without a previous saslStart from %s", ctx.remote)
 		return cmdErrorReply(errWire(18, "AuthenticationFailed", "Authentication failed."))
 	}
 	payload, ok := binaryPayload(cmd["payload"])
@@ -166,6 +177,8 @@ func (s *Server) cmdSaslContinue(ctx *connCtx, arg any, cmd db.Document) db.Docu
 	}
 	recHash := sha256.Sum256(recovered)
 	if !hmac.Equal(recHash[:], storedKey[:]) {
+		// Prueba SCRAM incorrecta = la contraseña enviada por el cliente no coincide con -pass.
+		s.logf("wire: wrong password for %q from %s (does not match -pass)", st.username, ctx.remote)
 		return cmdErrorReply(errWire(18, "AuthenticationFailed", "Authentication failed."))
 	}
 	serverKey := hmacSHA256(st.saltedPassword, []byte("Server Key"))
@@ -176,23 +189,33 @@ func (s *Server) cmdSaslContinue(ctx *connCtx, arg any, cmd db.Document) db.Docu
 		if err != nil {
 			ctx.authed = false
 			ctx.scram = nil
-			return cmdErrorReply(errWire(18, "AuthenticationFailed", "Authentication failed."))
+			// La base tiene RBAC activo: el gate del wire y los usuarios del motor (_users)
+			// son listas distintas, así que -user/-pass debe coincidir con un usuario real.
+			s.logf("wire: SCRAM proof for %q matches -pass but the engine rejected it: %v. "+
+				"This database has RBAC active: -user/-pass must be an existing user in _users "+
+				"(web console -> Users)", s.opts.AuthUser, err)
+			return cmdErrorReply(errWire(18, "AuthenticationFailed",
+				"Authentication failed: this database has users (RBAC active) and the wire user is not one of them. "+
+					"Use -user/-pass with an existing database user"))
 		}
 		ctx.session = sess
+		s.logf("wire: %q authenticated from %s (engine session, roles=%v)", s.opts.AuthUser, ctx.remote, sess.Roles())
+	} else {
+		s.logf("wire: %q authenticated from %s (database has no users: RBAC inactive)", s.opts.AuthUser, ctx.remote)
 	}
 	if st.skipEmpty {
 		ctx.scram = nil
 		return okReply(
 			"conversationId", int32(1),
 			"done", true,
-			"payload", binaryDoc([]byte("v=" + base64.StdEncoding.EncodeToString(serverSignature))),
+			"payload", binaryDoc([]byte("v="+base64.StdEncoding.EncodeToString(serverSignature))),
 		)
 	}
 	st.step = 2
 	return okReply(
 		"conversationId", int32(1),
 		"done", false,
-		"payload", binaryDoc([]byte("v=" + base64.StdEncoding.EncodeToString(serverSignature))),
+		"payload", binaryDoc([]byte("v="+base64.StdEncoding.EncodeToString(serverSignature))),
 	)
 }
 

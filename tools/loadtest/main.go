@@ -144,7 +144,7 @@ func main() {
 
 	// ── Find con índice (misma cardinalidad que el scan: buyer_id) ──
 	fmt.Println("\n5) Find CON índice — buyer_id=buyer-0042 (mismo match que §4)")
-	// ensure index exists for apples-to-apples
+	// asegurar que el índice existe para comparar en igualdad de condiciones
 	_ = s.EnsureIndex("ml_orders", []string{"buyer_id"}, false)
 	t = time.Now()
 	var hit int
@@ -236,14 +236,14 @@ func main() {
 	fmt.Printf("   total: %s\n", ms(dF))
 	fmt.Printf("   disco: %s  (%s)\n", human(sz), mode)
 
-	// ── Directory listing ──
+	// ── Listado del directorio ──
 	fmt.Println("\n11) Qué hay en disco")
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
 		fi, _ := e.Info()
 		fmt.Printf("   %-24s %10s  %s\n", e.Name(), human(fi.Size()), fi.Mode())
 	}
-	// peek header magic
+	// echar un vistazo al magic de la cabecera
 	f, _ := os.Open(path)
 	magic := make([]byte, 4)
 	_, _ = f.Read(magic)
@@ -269,11 +269,11 @@ func main() {
 		fmt.Println("  FAIL: lost docs")
 		os.Exit(1)
 	}
-	// unique still enforced
+	// el índice único se sigue aplicando
 	err = s2.Insert("ml_orders", db.Document{"order_id": "1000000"})
 	fmt.Printf("   unique viola tras reopen → %v (esperado duplicate)\n", err)
 
-	// spot check update persisted
+	// comprobar puntualmente que la actualización persistió
 	d, err := s2.Get("ml_orders", "1000000")
 	if err != nil || d["status"] != "delivered" {
 		fmt.Println("  FAIL update not persisted:", err, d["status"])

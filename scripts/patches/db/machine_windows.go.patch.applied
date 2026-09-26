@@ -1,0 +1,5 @@
+===FILE db/machine_windows.go
+--- 7 8
+// machineGuid devuelve el MachineGuid de Windows (estable por instalación).
+// Devuelve cadena vacía ante cualquier error del registro (el llamador recurre a "default").
+===END

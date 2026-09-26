@@ -3,6 +3,7 @@ package wire
 import (
 	"bufio"
 	"errors"
+	"log"
 	"net"
 	"strings"
 	"sync"
@@ -16,19 +17,23 @@ type ServerOptions struct {
 	DBName   string
 	AuthUser string
 	AuthPass string
+	// Logger recibe los diagnósticos del wire (fallos de SCRAM, credenciales del motor que
+	// no coinciden con -user/-pass). nil = log estándar (stderr con fecha y hora): los
+	// fallos de autenticación nunca se descartan en silencio.
+	Logger *log.Logger
 }
 
 type Server struct {
-	store    *db.Store
-	opts     ServerOptions
-	cursors  *cursorRegistry
-	mu       sync.Mutex
-	ln       net.Listener
-	conns    map[net.Conn]struct{}
-	closed   atomic.Bool
-	wg       sync.WaitGroup
-	connSeq  atomic.Int64
-	started  time.Time
+	store   *db.Store
+	opts    ServerOptions
+	cursors *cursorRegistry
+	mu      sync.Mutex
+	ln      net.Listener
+	conns   map[net.Conn]struct{}
+	closed  atomic.Bool
+	wg      sync.WaitGroup
+	connSeq atomic.Int64
+	started time.Time
 }
 
 func NewServer(store *db.Store, o ServerOptions) *Server {
@@ -42,6 +47,15 @@ func NewServer(store *db.Store, o ServerOptions) *Server {
 		conns:   make(map[net.Conn]struct{}),
 		started: time.Now(),
 	}
+}
+
+// logf escribe un diagnóstico en el logger configurado (log estándar si no se inyectó uno).
+func (s *Server) logf(format string, args ...any) {
+	lg := s.opts.Logger
+	if lg == nil {
+		lg = log.Default()
+	}
+	lg.Printf(format, args...)
 }
 
 func (s *Server) ListenAndServe(addr string) error {
@@ -223,6 +237,10 @@ func (s *Server) serveConn(c net.Conn) {
 		if err != nil {
 			return
 		}
+		// Manejar OP_MSG con moreToCome=true (fragmentación).
+		// Los clientes MongoDB (mongosh/Compass) envían inserts grandes en
+		// múltiples mensajes OP_MSG; el último tiene moreToCome=false.
+		// readMessage ya acumula los fragmentos y devuelve el body completo.
 		s.cursors.sweep()
 		if err := s.dispatchSafe(ctx, w, m); err != nil {
 			return
@@ -409,18 +427,18 @@ func okReply(fields ...any) db.Document {
 }
 
 var preAuthCommands = map[string]bool{
-	"hello":       true,
-	"isMaster":    true,
-	"ismaster":    true,
-	"ping":        true,
-	"saslStart":   true,
+	"hello":        true,
+	"isMaster":     true,
+	"ismaster":     true,
+	"ping":         true,
+	"saslStart":    true,
 	"saslContinue": true,
-	"buildInfo":   true,
-	"buildinfo":   true,
-	"getLog":      true,
-	"whatsmyuri":  true,
-	"logout":      true,
-	"isdbgrid":    true,
+	"buildInfo":    true,
+	"buildinfo":    true,
+	"getLog":       true,
+	"whatsmyuri":   true,
+	"logout":       true,
+	"isdbgrid":     true,
 }
 
 var commandNames = map[string]bool{

@@ -1,28 +1,27 @@
 @echo off
 REM ============================================================
-REM  MLStoreDB - iniciar servidor Mongo-compatible (M8)
+REM  MLStoreDB (Memory-Log Store Database) - iniciar servidor
 REM
-REM  Conecta con:  mongodb://127.0.0.1:28917
-REM  Clientes:     Navicat / MongoDB Compass / mongosh
-REM
-REM  Detener:      Ctrl+C  (hace flush final y cierra limpio)
+REM  Arranca vacio: las colecciones se crean al insertar por wire
+REM  (mongosh/Compass/Navicat), consola web o admin web.
+REM  Detener: Ctrl+C
 REM ============================================================
-setlocal
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-REM ---- configuracion (edita estas lineas) ---------------------
+REM ---- configuracion ------------------------------------------
 set ADDR=127.0.0.1:28917
-set DBNAME=demo
-set DBFILE=data\demo.mlstore
-set DBKEY=cambia-esta-clave-maestra-32b!
-REM Para habilitar auth SCRAM-SHA-256, quita REM de estas 2 lineas:
+set WEB=127.0.0.1:28918
+set DBDIR=databases
+set DBKEY=
+REM set DBKEY=tu-clave-32-bytes!!           <-- descomentar para cifrado
 REM set DBUSER=admin
 REM set DBPASS=secreto
-REM -------------------------------------------------------------
+REM -----------------------------------------------------------
 
-if not exist data mkdir data
 if not exist bin mkdir bin
 
+echo.
 echo [1/2] Compilando mls-server...
 go build -o bin\mls-server.exe .\tools\mls-server
 if errorlevel 1 (
@@ -31,21 +30,23 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/2] Iniciando servidor en %ADDR%
 echo.
-echo   Base de datos : %DBNAME%
-echo   Archivo       : %DBFILE%   (persistente, cifrado)
-echo   URI           : mongodb://%ADDR%
+echo [2/2] Iniciando servidor...
 echo.
-if defined DBUSER (
-    echo   Auth          : SCRAM-SHA-256 usuario "%DBUSER%"
-    echo   URI con auth  : mongodb://%DBUSER%:%DBPASS%@%ADDR%
-    echo.
-    bin\mls-server.exe -addr %ADDR% -path %DBFILE% -key "%DBKEY%" -db %DBNAME% -user %DBUSER% -pass %DBPASS%
+echo   Wire Mongo  : %ADDR%   (Compass / Navicat / mongosh)
+echo   Admin web   : http://%WEB%
+echo   Directorio  : %DBDIR%\   (BDs se crean desde la web o al insertar)
+echo.
+if defined DBKEY (
+    echo   Cifrado     : activado
 ) else (
-    bin\mls-server.exe -addr %ADDR% -path %DBFILE% -key "%DBKEY%" -db %DBNAME%
+    echo   Cifrado     : desactivado (configura DBKEY para cifrar)
 )
+echo.
+REM Sin -path: el servidor arranca con store vacio en memoria.
+REM Las colecciones se crean al insertar documentos por wire o web.
+bin\mls-server.exe -addr %ADDR% -web %WEB% -dbdir "%DBDIR%" -key "%DBKEY%"
 
 echo.
-echo Servidor detenido. Los datos quedaron guardados en %DBFILE%
+echo Servidor detenido.
 pause

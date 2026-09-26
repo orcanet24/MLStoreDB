@@ -1,0 +1,95 @@
+===FILE db/filev2.go
+--- 16 26
+// Formato del log de registros M1 (formatVersion 2):
+//
+//	[152B de cabecera][registro]* y el último registro COMMIT es el punto de confirmación atómico.
+//
+// Estructura de un registro (recHdrSize = 24):
+//
+//	type u8 | flags u8 | idLen u16 | payloadLen u32 | nonce [12] | crc u32
+//	id     [idLen]      — texto plano: u16be(collLen) || coll || docID
+//	payload[payloadLen] — AES-256-GCM(DEK, nonce, plain|zlib)
+//
+// El CRC32 cubre hdr[0:20] || id || payload.
+--- 37 37
+// flags por registro
+--- 44 44
+// defaultCacheBytes: presupuesto residente de 256 MB cuando Options.CacheBytes es cero.
+--- 47 47
+// cacheBudget resuelve el presupuesto residente en bytes. Negativo = sin límite.
+--- 58 58
+// metaCollPayload son los metadatos por colección dentro del registro META.
+--- 64 64
+// metaPayload es el texto plano de un registro META (esquema autoritativo para v2).
+--- 71 71
+// recOp es un registro preparado para el próximo flush.
+--- 75 75
+	id      string // docID o "" para META/IDX/COMMIT
+--- 78 78
+// idxFields identifica un registro IDX (coll + clave de fields+unique).
+--- 81 81
+// outOff/outLen los rellena el escritor (offsets de la reescritura completa).
+--- 86 86
+// flushState es una instantánea consistente del estado del almacén para escribir fuera del bloqueo.
+--- 91 91
+	writeSeq      uint64 // instantánea de s.writeSeq (marca duradera de contrapresión M3)
+--- 102 102
+// preparación de registros v2
+--- 103 103
+	full bool // reescribir todo el archivo o añadir al final
+--- 105 105
+	ops  []recOp // orden: [DELs] [DOCs] [META] [IDXs] [COMMIT] en reescritura completa; incremental similar
+--- 107 107
+// contabilidad de entradas sucias para la limpieza posterior al flush
+--- 147 147
+// buildRecord ensambla un registro completo en disco (hdr+id+payload).
+--- 189 190
+// parseRecordAt valida el registro en data[off:]; devuelve los campos ya
+// interpretados y el tamaño total del registro. flags contiene flagRecSuspect/Compressed.
+--- 207 208
+// El CRC cubre hdr[0:20] || id || ct — id/ct van DESPUÉS del campo crc, así que
+// no son contiguos con hdr[0:20]; se aplica el hash a los dos tramos.
+--- 219 219
+// errRecTorn marca una cola incompleta (caída a mitad de escritura) — se autocorrige truncando.
+--- 222 222
+// decodePayload descifra (y opcionalmente descomprime con zlib) la carga de un registro.
+--- 237 237
+// openRead abre path para lecturas aleatorias.
+--- 242 242
+// scanResult es el resultado de escanear un log de registros v2.
+--- 244 244
+	commitEnd int64 // offset final del último COMMIT (frontera de aplicación)
+--- 245 245
+	truncated int64 // si es >0, el archivo debe truncarse a este tamaño
+--- 258 258
+	off     int64 // offset absoluto del registro
+--- 262 262
+	payload []byte // slice del criptograma crudo (subslice de los datos del archivo — hay que copiarlo)
+--- 265 266
+// scanV2 interpreta los registros de data (todos los bytes del archivo, cabecera incluida).
+// Solo aplica los registros hasta el último COMMIT; detecta colas cortadas y registros sospechosos.
+--- 275 275
+// Primera pasada: recorrer todos los registros completos y anotar las fronteras COMMIT.
+--- 289 291
+// Los archivos duraderos se escriben de forma atómica hasta COMMIT (reescritura
+// completa) o se añaden después de un COMMIT existente. Un comienzo cortado sin
+// ningún COMMIT previo indica corrupción/truncamiento, no una cola recuperable.
+--- 313 313
+// Sin COMMIT: nada duradero (o primer flush cortado). Truncar a la cabecera.
+--- 316 316
+// mantener la petición de truncado
+--- 321 321
+// Segunda pasada: aplicar los registros con recOff < lastCommit.
+--- 331 331
+// solo la frontera
+--- 367 367
+// copiar los bytes de la carga (data podría reutilizarse conceptualmente)
+--- 380 380
+// tipo desconocido: ignorar (compatibilidad futura dentro de la misma versión mayor)
+--- 383 385
+// Aplicar los DELs sobre los documentos (gana el borrado si la misma clave aparece
+// antes que el "del" en el log — bitcask: gana la última escritura según el orden de
+// escaneo; aquí se aplicó en orden, así que se reaplican los DEL que van después de un DOC).
+--- 390 390
+// Recorrer de nuevo el orden aplicado para intercalar DOC/DEL:
+===END

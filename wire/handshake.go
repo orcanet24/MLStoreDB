@@ -13,18 +13,18 @@ import (
 
 func cmdHello(ctx *connCtx, cmd db.Document) db.Document {
 	reply := db.Document{
-		"isWritablePrimary":           true,
-		"ismaster":                    true,
-		"helloOk":                     true,
-		"maxBsonObjectSize":           int32(1 << 20),
-		"maxMessageSizeBytes":         int32(48000000),
-		"maxWriteBatchSize":           int32(maxWriteBatchSize),
-		"localTime":                   db.Document{"$date": float64(time.Now().UnixMilli())},
+		"isWritablePrimary":            true,
+		"ismaster":                     true,
+		"helloOk":                      true,
+		"maxBsonObjectSize":            int32(1 << 20),
+		"maxMessageSizeBytes":          int32(48000000),
+		"maxWriteBatchSize":            int32(maxWriteBatchSize),
+		"localTime":                    db.Document{"$date": float64(time.Now().UnixMilli())},
 		"logicalSessionTimeoutMinutes": int32(30),
-		"connectionId":                int32(ctx.id),
-		"minWireVersion":              int32(0),
-		"maxWireVersion":              int32(17),
-		"readOnly":                    false,
+		"connectionId":                 int32(ctx.id),
+		"minWireVersion":               int32(0),
+		"maxWireVersion":               int32(17),
+		"readOnly":                     false,
 	}
 	if ctx.srv.opts.AuthUser != "" {
 		reply["saslSupportedMechs"] = []any{"SCRAM-SHA-256"}
@@ -56,8 +56,8 @@ func cmdConnectionStatus(ctx *connCtx) db.Document {
 		}
 	}
 	return okReply("authInfo", db.Document{
-		"authenticatedUsers":      users,
-		"authenticatedUserRoles":  roles,
+		"authenticatedUsers":     users,
+		"authenticatedUserRoles": roles,
 	})
 }
 

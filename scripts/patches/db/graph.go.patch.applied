@@ -1,0 +1,74 @@
+===FILE db/graph.go
+--- 13 14
+// Las colecciones de aristas viven como colecciones normales llamadas edges.<tipo>
+// con documentos {_id, _from, _to, ...props} (M6).
+--- 17 17
+// Direction selecciona la orientación del recorrido de aristas.
+--- 21 23
+	Outgoing Direction = iota + 1 // _from → _to (por defecto)
+	Incoming                      // _to → _from
+	Both                          // unión, sin duplicados
+--- 26 26
+// Límites anti-atasco de Traverse (M6).
+--- 36 37
+// graphAdj es la instantánea de adyacencia CSR de un par (tipo de arista, dirección):
+// claves ordenadas, rangos indptr e índices dentro de la tabla plana de ids vecinos.
+--- 39 43
+	keys    []string       // fuentes ordenadas (vértices con al menos 1 arista saliente)
+	keyIdx  map[string]int // fuente → fila
+	indptr  []int          // len(keys)+1
+	indices []int          // columnas vecinas dentro de neigh (CSR clásico)
+	neigh   []string       // tabla de ids referenciada por indices
+--- 62 63
+// buildAdj construye el CSR a partir de los pares de aristas. reverse intercambia los papeles (from,to).
+// Los vecinos de cada fila se deduplican y se ordenan.
+--- 136 137
+// AddEdge inserta {_from,_to,...props} en edges.<tipo>; devuelve el _id
+// (ULID automático si props no trae ninguno). Incrementa la época del grafo (invalidación de caché).
+--- 161 161
+// RemoveEdge elimina el documento de arista por _id de edges.<tipo>.
+--- 169 169
+// RemoveEdge es Store.RemoveEdge con permiso de escritura sobre edges.<tipo> (admin M9).
+--- 177 177
+// AddEdge es la inserción con sesión (escritura RBAC sobre edges.<tipo>).
+--- 198 199
+// Neighbors devuelve los ids de vértices adyacentes (sin duplicados y ordenados).
+// dir usa Outgoing por defecto cuando vale 0.
+--- 204 204
+// Neighbors es la lectura con sesión (RBAC sobre edges.<tipo>).
+--- 252 252
+// TraverseOptions controla el BFS desde Start (M6).
+--- 256 259
+	Direction Direction // 0 = Outgoing
+	MinDepth  int       // devolver nodos con profundidad ≥ MinDepth (se sigue recorriendo hasta MaxDepth)
+	MaxDepth  int       // 0 = 5 por defecto; se limita a [0, maxTraverseDepth]
+	Limit     int       // máximo de nodos devueltos; 0 = por defecto; se limita a maxTraverseLimit
+--- 262 262
+// TraverseNode es un vértice alcanzado por Traverse.
+--- 268 269
+// Traverse ejecuta un BFS desde opts.Start hasta MaxDepth/Limit (anti-atasco).
+// Los resultados se ordenan por descubrimiento (BFS). Start se incluye en profundidad 0.
+--- 274 274
+// Traverse es el recorrido con sesión (RBAC sobre edges.<tipo>).
+--- 370 372
+// ShortestPath devuelve el camino más corto sin pesos [from, ..., to] mediante BFS, o nil
+// si no es alcanzable dentro de maxDepth (0 = 6 por defecto, limitado a maxPathDepth).
+// Variante con sesión: Session.ShortestPath.
+--- 377 377
+// ShortestPath es el camino BFS con sesión (RBAC sobre edges.<tipo>).
+--- 432 432
+// reconstruir
+--- 441 441
+// invertir
+--- 453 453
+// --- mantenimiento de caché ---------------------------------------------------
+--- 455 455
+// noteEdgeMutation incrementa la época del grafo. El llamador tiene s.mu (escritura).
+--- 462 463
+// ensureGraphLocked reconstruye las instantáneas CSR cuando la época ha cambiado.
+// Orden de bloqueo: graphMu → s.mu (igual que ensureGraph).
+--- 498 498
+// graphFields van adosados a Store (M6).
+--- 502 502
+	graphBuiltEpoch uint64 // protegido por graphMu
+===END

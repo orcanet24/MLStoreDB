@@ -1,0 +1,42 @@
+===FILE db/hooks_test.go
+--- 62 62
+		// también el patrón "*"
+--- 168 168
+		// cadena: insertar en c0 → el hook inserta en c1 → ... cada nivel suma 1 de profundidad
+--- 178 178
+		// inserción raíz: profundidad 1 (hook de c0) y luego anidada... supera maxHookDepth → ErrHookDepth
+--- 179 179
+		// Los hooks "after" ignoran los errores, así que la cadena se detiene en silencio al llegar al límite.
+--- 183 183
+		// nivel más profundo que debería existir: se lograron maxHookDepth inserciones anidadas
+--- 184 184
+		// ca (raíz) → cb(1) → cc(2) → ... hasta la profundidad maxHookDepth
+--- 197 197
+		// before_insert sobre "a" inserta de nuevo en "a" → se vuelve a entrar en el mismo hook → ciclo
+--- 213 213
+		// hooks distintos encadenados a→b→c...: se supera la profundidad (no es un ciclo)
+--- 227 227
+		// la raíz quedó vetada al superar la profundidad dentro de la cadena → no se persistió nada en la raíz
+--- 257 257
+		// FIFO: la cola se llenó en el orden de inserción; un solo worker lo preserva
+--- 297 297
+	var auditMsg atomic.Value // string: "" = correcto
+--- 300 301
+			// el hook es de confianza: se salta el RBAC y escribe la auditoría aunque
+			// la API cruda del Store devolvería ErrUnauthorized
+--- 315 315
+		// la auditoría existe (el hook se saltó la autenticación); el Store crudo sigue denegado
+--- 319 319
+		// pero el hook no puede escribir en colecciones del sistema
+--- 339 339
+		// comprobación: las mutaciones funcionan igual con cero hooks registrados
+--- 366 366
+		// el primer trabajo bloquea al worker
+--- 371 374
+		// llenar la cola por encima de su capacidad sin bloquear el test:
+		// el límite de la cola es hookQueueSize; insertar hookQueueSize más (llena el búfer),
+		// el siguiente envío se bloquearía — no se emite (ese es el contrato).
+		// En su lugar se comprueba que WaitAsyncHooks sigue drenando tras liberar.
+--- 385 385
+		// asegurar que el worker realmente se detuvo
+===END
