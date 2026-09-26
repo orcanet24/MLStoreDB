@@ -21,6 +21,7 @@ ES/EN language switcher.
 7. [Triggers](es/07-triggers.md) — Hooks Go + triggers JSON declarativos
 8. [Grafos](es/08-grafos.md) — AddEdge, Neighbors, Traverse, ShortestPath
 9. [Servidor Mongo](es/09-servidor-mongo.md) — mls-server, Navicat/Compass/mongosh
+10. [Consola web](es/10-admin-web.md) — administración completa + canvas de grafos (M9)
 
 ## English (`en/`)
 
@@ -33,3 +34,4 @@ ES/EN language switcher.
 7. [Triggers](en/07-triggers.md) — Go hooks + declarative JSON triggers
 8. [Graphs](en/08-graphs.md) — AddEdge, Neighbors, Traverse, ShortestPath
 9. [Mongo server](en/09-mongo-server.md) — mls-server, Navicat/Compass/mongosh
+10. [Admin console](en/10-admin-web.md) — full administration + graph canvas (M9)

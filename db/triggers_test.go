@@ -8,7 +8,7 @@ import (
 
 func TestTriggerBeforeSetAndVetoByFilter(t *testing.T) {
 	s := New()
-	// stamp every insert
+	// marcar cada inserción
 	if _, err := s.CreateTrigger(Trigger{
 		Event:      BeforeInsert,
 		Collection: "orders",
@@ -29,7 +29,7 @@ func TestTriggerBeforeSetAndVetoByFilter(t *testing.T) {
 		t.Errorf("set action lost: %v", doc)
 	}
 
-	// filter: only PAID gets vip; veto path via set on filtered subset
+	// filtro: solo PAID recibe vip; camino de veto con un set sobre el subconjunto filtrado
 	if _, err := s.CreateTrigger(Trigger{
 		Event:      BeforeInsert,
 		Collection: "orders",
@@ -70,7 +70,7 @@ func TestTriggerAfterInsertAuditWithTemplates(t *testing.T) {
 	if err := s.Insert("orders", Document{"_id": "o-1", "buyer": "ana"}); err != nil {
 		t.Fatal(err)
 	}
-	// after_insert is sync inline → audit exists immediately
+	// after_insert es síncrono y en línea → la auditoría existe de inmediato
 	docs, err := s.Find("audit", nil, nil)
 	if err != nil || len(docs) != 1 {
 		t.Fatalf("audit = %v, %v", docs, err)
@@ -89,7 +89,7 @@ func TestTriggerUnsetBeforeDelete(t *testing.T) {
 	if err := s.Insert("q", Document{"_id": "1", "temp": "x", "keep": "y"}); err != nil {
 		t.Fatal(err)
 	}
-	// before_delete mutates Old view only (doc about to vanish) — use before_update instead for unset demo
+	// before_delete solo muta la vista Old (el documento está a punto de desaparecer) — usa before_update para el ejemplo de unset
 	if _, err := s.CreateTrigger(Trigger{
 		Event:      BeforeUpdate,
 		Collection: "q",
@@ -113,7 +113,7 @@ func TestTriggerUnsetBeforeDelete(t *testing.T) {
 
 func TestTriggerUpdateTargetAndOldRef(t *testing.T) {
 	s := New()
-	// counter doc
+	// documento contador
 	if err := s.Insert("counters", Document{"_id": "orders", "n": float64(0)}); err != nil {
 		t.Fatal(err)
 	}
@@ -154,9 +154,9 @@ func TestTriggerOldRefBeforeUpdate(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// filter matches new doc (patch merged view? we match against patch/Doc=patch) —
-	// before_update Doc is the PATCH not full doc; filter on patch field:
-	// our patch is {"state":"closed"} → filter matches → old.state = "open"
+	// el filtro coincide con el documento nuevo (¿vista fusionada con el patch? se evalúa contra patch/Doc=patch) —
+	// en before_update Doc es el PATCH, no el documento completo; el filtro va sobre un campo del patch:
+	// el patch es {"state":"closed"} → el filtro coincide → old.state = "open"
 	if err := s.Update("q", "1", Document{"state": "closed"}); err != nil {
 		t.Fatal(err)
 	}
@@ -194,8 +194,8 @@ func TestTriggerValidation(t *testing.T) {
 		{Event: "nope", Collection: "q", Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"a": 1}}}},
 		{Event: BeforeInsert, Collection: "q", Actions: nil},
 		{Event: BeforeInsert, Collection: "q", Actions: []TriggerAction{{Type: "wat"}}},
-		{Event: AfterInsert, Collection: "q", Actions: []TriggerAction{{Type: "unset", Names: []string{"x"}}}}, // unset not after
-		{Event: BeforeInsert, Async: true, Collection: "q", Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"a": 1}}}}, // async before
+		{Event: AfterInsert, Collection: "q", Actions: []TriggerAction{{Type: "unset", Names: []string{"x"}}}},                       // unset no vale en after
+		{Event: BeforeInsert, Async: true, Collection: "q", Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"a": 1}}}}, // async no vale en before
 		{Event: AfterInsert, Collection: "q", Actions: []TriggerAction{{Type: "insert", Collection: "", Doc: map[string]any{"a": 1}}}},
 	}
 	for i, c := range cases {
@@ -210,7 +210,7 @@ func TestTriggerDeleteAndList(t *testing.T) {
 	id, err := s.CreateTrigger(Trigger{
 		Event:      BeforeInsert,
 		Collection: "q",
-		Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"t": true}}},
+		Actions:    []TriggerAction{{Type: "set", Fields: map[string]any{"t": true}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestTriggerDeleteAndList(t *testing.T) {
 	if _, ok := d2["t"]; ok {
 		t.Error("trigger still fires after delete")
 	}
-	// system coll hidden + protected
+	// colección del sistema oculta + protegida
 	for _, n := range s.Collections() {
 		if n == triggersColl {
 			t.Error("_triggers leaked")
@@ -253,7 +253,7 @@ func TestTriggerDisabledNotRegistered(t *testing.T) {
 		Event:      BeforeInsert,
 		Collection: "q",
 		Enabled:    &off,
-		Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"t": true}}},
+		Actions:    []TriggerAction{{Type: "set", Fields: map[string]any{"t": true}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestTriggerPersistsReopen(t *testing.T) {
 	if _, err := s.CreateTrigger(Trigger{
 		Event:      BeforeInsert,
 		Collection: "orders",
-		Actions: []TriggerAction{{Type: "set", Fields: map[string]any{"stamped": true}}},
+		Actions:    []TriggerAction{{Type: "set", Fields: map[string]any{"stamped": true}}},
 	}); err != nil {
 		t.Fatal(err)
 	}

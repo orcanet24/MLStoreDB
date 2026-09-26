@@ -10,20 +10,20 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// Edge collections live as normal collections named edges.<type>
-// with docs {_id, _from, _to, ...props} (M6).
+// Las colecciones de aristas viven como colecciones normales llamadas edges.<tipo>
+// con documentos {_id, _from, _to, ...props} (M6).
 const edgeCollPrefix = "edges."
 
-// Direction selects edge traversal orientation.
+// Direction selecciona la orientación del recorrido de aristas.
 type Direction int
 
 const (
-	Outgoing Direction = iota + 1 // _from → _to (default)
+	Outgoing Direction = iota + 1 // _from → _to (por defecto)
 	Incoming                      // _to → _from
-	Both                          // union, deduped
+	Both                          // unión, sin duplicados
 )
 
-// Traverse anti-choke limits (M6).
+// Límites anti-atasco de Traverse (M6).
 const (
 	defaultTraverseDepth = 5
 	maxTraverseDepth     = 32
@@ -33,14 +33,14 @@ const (
 	maxPathDepth         = 32
 )
 
-// graphAdj is the CSR adjacency snapshot for one (edgeType, direction):
-// keys sorted, indptr ranges, indices into the flat neigh id table.
+// graphAdj es la instantánea de adyacencia CSR de un par (tipo de arista, dirección):
+// claves ordenadas, rangos indptr e índices dentro de la tabla plana de ids vecinos.
 type graphAdj struct {
-	keys    []string       // sorted sources (vertices with ≥1 out-edge)
-	keyIdx  map[string]int // source → row
+	keys    []string       // fuentes ordenadas (vértices con al menos 1 arista saliente)
+	keyIdx  map[string]int // fuente → fila
 	indptr  []int          // len(keys)+1
-	indices []int          // neighbor columns into neigh (classic CSR)
-	neigh   []string       // id table referenced by indices
+	indices []int          // columnas vecinas dentro de neigh (CSR clásico)
+	neigh   []string       // tabla de ids referenciada por indices
 }
 
 func (g *graphAdj) neighborsOf(v string) []string {
@@ -59,8 +59,8 @@ func (g *graphAdj) neighborsOf(v string) []string {
 	return out
 }
 
-// buildAdj constructs CSR from edge pairs. reverse swaps (from,to) roles.
-// Neighbors per row are deduped and sorted.
+// buildAdj construye el CSR a partir de los pares de aristas. reverse intercambia los papeles (from,to).
+// Los vecinos de cada fila se deduplican y se ordenan.
 func buildAdj(pairs [][2]string, reverse bool) *graphAdj {
 	bucket := map[string]map[string]struct{}{}
 	verts := map[string]struct{}{}
@@ -133,8 +133,8 @@ func validateEdge(edgeType, from, to string) error {
 	return nil
 }
 
-// AddEdge inserts {_from,_to,...props} into edges.<type>; returns _id
-// (auto ULID when props has none). Bumps the graph epoch (cache invalidation).
+// AddEdge inserta {_from,_to,...props} en edges.<tipo>; devuelve el _id
+// (ULID automático si props no trae ninguno). Incrementa la época del grafo (invalidación de caché).
 func (s *Store) AddEdge(edgeType string, from, to string, props Document) (string, error) {
 	if err := validateEdge(edgeType, from, to); err != nil {
 		return "", err
@@ -158,7 +158,7 @@ func (s *Store) AddEdge(edgeType string, from, to string, props Document) (strin
 	return id, nil
 }
 
-// RemoveEdge deletes the edge doc by _id from edges.<type>.
+// RemoveEdge elimina el documento de arista por _id de edges.<tipo>.
 func (s *Store) RemoveEdge(edgeType string, id string) error {
 	if edgeType == "" {
 		return fmt.Errorf("db: edge type required")
@@ -166,7 +166,15 @@ func (s *Store) RemoveEdge(edgeType string, id string) error {
 	return s.Delete(edgeCollName(edgeType), id)
 }
 
-// AddEdge is the Session-scoped insert (RBAC write on edges.<type>).
+// RemoveEdge es Store.RemoveEdge con permiso de escritura sobre edges.<tipo> (admin M9).
+func (sess *Session) RemoveEdge(edgeType string, id string) error {
+	if edgeType == "" {
+		return fmt.Errorf("db: edge type required")
+	}
+	return sess.Delete(edgeCollName(edgeType), id)
+}
+
+// AddEdge es la inserción con sesión (escritura RBAC sobre edges.<tipo>).
 func (sess *Session) AddEdge(edgeType string, from, to string, props Document) (string, error) {
 	if err := validateEdge(edgeType, from, to); err != nil {
 		return "", err
@@ -187,13 +195,13 @@ func (sess *Session) AddEdge(edgeType string, from, to string, props Document) (
 	return id, sess.Insert(edgeCollName(edgeType), doc)
 }
 
-// Neighbors returns adjacent vertex ids (deduped, sorted).
-// dir defaults to Outgoing when 0.
+// Neighbors devuelve los ids de vértices adyacentes (sin duplicados y ordenados).
+// dir usa Outgoing por defecto cuando vale 0.
 func (s *Store) Neighbors(edgeType string, vertex string, dir Direction) ([]string, error) {
 	return s.neighbors(nil, edgeType, vertex, dir)
 }
 
-// Neighbors is the Session-scoped read (RBAC on edges.<type>).
+// Neighbors es la lectura con sesión (RBAC sobre edges.<tipo>).
 func (sess *Session) Neighbors(edgeType string, vertex string, dir Direction) ([]string, error) {
 	return sess.store.neighbors(sess, edgeType, vertex, dir)
 }
@@ -241,29 +249,29 @@ func (s *Store) neighbors(sess *Session, edgeType string, vertex string, dir Dir
 	}
 }
 
-// TraverseOptions controls BFS from Start (M6).
+// TraverseOptions controla el BFS desde Start (M6).
 type TraverseOptions struct {
 	EdgeType  string
 	Start     string
 	Direction Direction // 0 = Outgoing
-	MinDepth  int       // return nodes with depth ≥ MinDepth (still traverses to MaxDepth)
-	MaxDepth  int       // 0 = default 5; clamped to [0, maxTraverseDepth]
-	Limit     int       // max nodes returned; 0 = default; clamped to maxTraverseLimit
+	MinDepth  int       // devolver nodos con profundidad ≥ MinDepth (se sigue recorriendo hasta MaxDepth)
+	MaxDepth  int       // 0 = 5 por defecto; se limita a [0, maxTraverseDepth]
+	Limit     int       // máximo de nodos devueltos; 0 = por defecto; se limita a maxTraverseLimit
 }
 
-// TraverseNode is one vertex reached by Traverse.
+// TraverseNode es un vértice alcanzado por Traverse.
 type TraverseNode struct {
 	Vertex string `json:"vertex"`
 	Depth  int    `json:"depth"`
 }
 
-// Traverse runs BFS from opts.Start up to MaxDepth/Limit (anti-choke).
-// Results ordered by discovery (BFS). Start included at depth 0.
+// Traverse ejecuta un BFS desde opts.Start hasta MaxDepth/Limit (anti-atasco).
+// Los resultados se ordenan por descubrimiento (BFS). Start se incluye en profundidad 0.
 func (s *Store) Traverse(opts TraverseOptions) ([]TraverseNode, error) {
 	return s.traverse(nil, opts)
 }
 
-// Traverse is the Session-scoped graph walk (RBAC on edges.<type>).
+// Traverse es el recorrido con sesión (RBAC sobre edges.<tipo>).
 func (sess *Session) Traverse(opts TraverseOptions) ([]TraverseNode, error) {
 	return sess.store.traverse(sess, opts)
 }
@@ -359,14 +367,14 @@ func (s *Store) traverse(sess *Session, opts TraverseOptions) ([]TraverseNode, e
 	return result, nil
 }
 
-// ShortestPath returns the unweighted shortest vertex path [from, ..., to]
-// via BFS, or nil when unreachable within maxDepth (0 = default 6,
-// clamped to maxPathDepth). Session-scoped variant: Session.ShortestPath.
+// ShortestPath devuelve el camino más corto sin pesos [from, ..., to] mediante BFS, o nil
+// si no es alcanzable dentro de maxDepth (0 = 6 por defecto, limitado a maxPathDepth).
+// Variante con sesión: Session.ShortestPath.
 func (s *Store) ShortestPath(edgeType, from, to string, maxDepth int) ([]string, error) {
 	return s.shortestPath(nil, edgeType, from, to, maxDepth)
 }
 
-// ShortestPath is the Session-scoped BFS path (RBAC on edges.<type>).
+// ShortestPath es el camino BFS con sesión (RBAC sobre edges.<tipo>).
 func (sess *Session) ShortestPath(edgeType, from, to string, maxDepth int) ([]string, error) {
 	return sess.store.shortestPath(sess, edgeType, from, to, maxDepth)
 }
@@ -421,7 +429,7 @@ func (s *Store) shortestPath(sess *Session, edgeType, from, to string, maxDepth 
 			}
 			prev[n] = cur.v
 			if n == to {
-				// reconstruct
+				// reconstruir
 				path := []string{to}
 				for x := to; x != ""; {
 					x = prev[x]
@@ -430,7 +438,7 @@ func (s *Store) shortestPath(sess *Session, edgeType, from, to string, maxDepth 
 					}
 					path = append(path, x)
 				}
-				// reverse
+				// invertir
 				for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
 					path[i], path[j] = path[j], path[i]
 				}
@@ -442,17 +450,17 @@ func (s *Store) shortestPath(sess *Session, edgeType, from, to string, maxDepth 
 	return nil, nil
 }
 
-// --- cache maintenance ---------------------------------------------------
+// --- mantenimiento de caché ---------------------------------------------------
 
-// noteEdgeMutation bumps the graph epoch. Caller holds s.mu (write).
+// noteEdgeMutation incrementa la época del grafo. El llamador tiene s.mu (escritura).
 func (s *Store) noteEdgeMutation(coll string) {
 	if isEdgeColl(coll) {
 		s.graphEpoch.Add(1)
 	}
 }
 
-// ensureGraphLocked rebuilds CSR snapshots when the epoch moved.
-// Lock order: graphMu → s.mu (same as ensureGraph).
+// ensureGraphLocked reconstruye las instantáneas CSR cuando la época ha cambiado.
+// Orden de bloqueo: graphMu → s.mu (igual que ensureGraph).
 func (s *Store) ensureGraphLocked() {
 	cur := s.graphEpoch.Load()
 	if s.graphOut != nil && s.graphBuiltEpoch == cur {
@@ -487,11 +495,11 @@ func (s *Store) ensureGraphLocked() {
 	s.graphOut, s.graphIn = out, inn
 }
 
-// graphFields are attached to Store (M6).
+// graphFields van adosados a Store (M6).
 type graphFields struct {
 	graphMu         sync.Mutex
 	graphEpoch      atomic.Uint64
-	graphBuiltEpoch uint64 // guarded by graphMu
+	graphBuiltEpoch uint64 // protegido por graphMu
 	graphOut        map[string]*graphAdj
 	graphIn         map[string]*graphAdj
 }

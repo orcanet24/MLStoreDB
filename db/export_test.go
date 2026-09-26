@@ -39,7 +39,7 @@ func TestExportCSVNestedJSON(t *testing.T) {
 	if err := s.ExportCSV("q", &buf); err != nil {
 		t.Fatal(err)
 	}
-	// CSV doubles quotes: "{""a"":1}"
+	// el CSV duplica las comillas dobles (por ejemplo {"a":1})
 	if !strings.Contains(buf.String(), `""a"":1`) && !strings.Contains(buf.String(), `{"a":1}`) {
 		t.Errorf("nested: %q", buf.String())
 	}
@@ -82,7 +82,7 @@ func TestApplyMigrationsForward(t *testing.T) {
 		t.Errorf("doc: %v", d)
 	}
 
-	// re-apply is no-op
+	// volver a aplicar no hace nada
 	if err := s.ApplyMigrations([]Migration{{Version: 2, Name: "again", Up: func(*Store) error {
 		t.Error("should not re-run")
 		return nil

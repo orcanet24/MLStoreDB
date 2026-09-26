@@ -15,12 +15,12 @@ func TestOptionsResolveDefaults(t *testing.T) {
 	if got := o.lockFileName(); got != "mlstoredb.lock" {
 		t.Fatalf("default lock file = %q", got)
 	}
-	// Zero and negative fall back to the default.
+	// Cero y negativo recurren al valor por defecto.
 	neg := Options{AutoFlush: -time.Second}
 	if got := neg.autoFlushInterval(); got != 2*time.Second {
 		t.Fatalf("negative auto-flush should fall back to 2s, got %v", got)
 	}
-	// Custom values pass through.
+	// Los valores personalizados pasan tal cual.
 	custom := Options{AutoFlush: 250 * time.Millisecond, LockFile: "app.lock"}
 	if got := custom.autoFlushInterval(); got != 250*time.Millisecond {
 		t.Fatalf("custom auto-flush = %v", got)
@@ -28,7 +28,7 @@ func TestOptionsResolveDefaults(t *testing.T) {
 	if got := custom.lockFileName(); got != "app.lock" {
 		t.Fatalf("custom lock file = %q", got)
 	}
-	// FindWorkers: 0 → GOMAXPROCS, negative → 1 (serial), positive → n.
+	// FindWorkers: 0 → GOMAXPROCS, negativo → 1 (serie), positivo → n.
 	var fw Options
 	if got := fw.findWorkers(); got < 1 {
 		t.Fatalf("default findWorkers = %d, want >= 1", got)
@@ -39,7 +39,7 @@ func TestOptionsResolveDefaults(t *testing.T) {
 	if got := (Options{FindWorkers: 7}).findWorkers(); got != 7 {
 		t.Fatalf("custom findWorkers = %d, want 7", got)
 	}
-	// MaxPendingWrites: 0 = unlimited, positive passes through.
+	// MaxPendingWrites: 0 = sin límite, los positivos pasan tal cual.
 	if got := (Options{}).maxPendingWrites(); got != 0 {
 		t.Fatalf("default maxPendingWrites = %d, want 0", got)
 	}
@@ -63,7 +63,7 @@ func TestOpenWithLockCustomLockFile(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Custom lock file exists; the default one does not.
+	// Existe el archivo de bloqueo personalizado; el de por defecto no.
 	if _, err := os.Stat(filepath.Join(dir, "myapp-a.lock")); err != nil {
 		t.Fatalf("custom lock file not created: %v", err)
 	}
@@ -71,13 +71,13 @@ func TestOpenWithLockCustomLockFile(t *testing.T) {
 		t.Fatalf("default lock file must not exist when LockFile is set (err=%v)", err)
 	}
 
-	// Second open with the SAME custom lock → blocked.
+	// Una segunda apertura con el MISMO bloqueo personalizado → bloqueada.
 	if _, err := OpenWithLock(path, custom); err != ErrAlreadyOpen {
 		t.Fatalf("second open with same LockFile: err=%v, want ErrAlreadyOpen", err)
 	}
 
-	// Opening the same file with the DEFAULT lock name must succeed: locks
-	// are independent, this is the multi-db-per-directory use case.
+	// Abrir el mismo archivo con el nombre de bloqueo POR DEFECTO debe funcionar: los
+	// bloqueos son independientes, es el caso de uso de varias bases por directorio.
 	s2, err := OpenWithLock(path, Options{MasterKey: custom.MasterKey, MachineID: "m", LightKDF: true})
 	if err != nil {
 		t.Fatalf("open with default lock name while custom lock held: %v", err)
@@ -94,7 +94,7 @@ func TestRepairHonorsCustomLockFile(t *testing.T) {
 		LockFile: "myapp-r.lock",
 	}
 
-	// Create a valid clean file.
+	// Crear un archivo limpio y válido.
 	s, err := OpenWithLock(path, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestRepairHonorsCustomLockFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Repair works with the custom lock name.
+	// Repair funciona con el nombre de bloqueo personalizado.
 	rep, err := Repair(path, opts)
 	if err != nil {
 		t.Fatalf("repair with custom lock: %v", err)
@@ -115,7 +115,7 @@ func TestRepairHonorsCustomLockFile(t *testing.T) {
 		t.Fatalf("repair kept %d docs, want 1", rep.DocsKept)
 	}
 
-	// Repair is blocked while another process holds that custom lock.
+	// Repair queda bloqueado mientras otro proceso tiene ese bloqueo personalizado.
 	s2, err := OpenWithLock(path, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ func TestAutoFlushCustomIntervalPersists(t *testing.T) {
 	if err := s.Insert("q", Document{"_id": "1", "x": 1}); err != nil {
 		t.Fatal(err)
 	}
-	// No Flush/Close — only the fast ticker can persist this.
+	// Sin Flush/Close — solo el ticker rápido puede persistir esto.
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		time.Sleep(100 * time.Millisecond)

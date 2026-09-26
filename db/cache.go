@@ -4,18 +4,19 @@ import (
 	"sync/atomic"
 )
 
-// docEntry is one document slot in a collection: metadata always present,
-// payload may be cold (docP == nil) and reloaded from the record log.
+// docEntry es una ranura de documento dentro de una colección: los metadatos
+// están siempre presentes y la carga puede estar "fría" (docP == nil), en cuyo
+// caso se relee del log de registros.
 type docEntry struct {
-	docP   atomic.Pointer[Document] // nil = cold (must load from file)
-	recOff atomic.Int64             // record offset; -1 = never written
-	recLen atomic.Int32             // full record length at recOff
-	dirty  atomic.Bool              // mutated since last successful flush
-	refBit atomic.Bool              // second-chance clock bit
-	size   atomic.Int64             // resident payload estimate (bytes)
+	docP   atomic.Pointer[Document] // nil = frío (hay que cargarlo del archivo)
+	recOff atomic.Int64             // offset del registro; -1 = nunca escrito
+	recLen atomic.Int32             // longitud completa del registro en recOff
+	dirty  atomic.Bool              // mutado desde el último flush correcto
+	refBit atomic.Bool              // bit de reloj de segunda oportunidad
+	size   atomic.Int64             // estimación de la carga residente (bytes)
 
-	// mutGen is only accessed under Store.mu.
-	mutGen uint64 // dirtyGen when dirty was last set
+	// mutGen solo se accede bajo Store.mu.
+	mutGen uint64 // dirtyGen cuando se puso dirty por última vez
 }
 
 func newDocEntry(doc Document) *docEntry {
@@ -27,8 +28,8 @@ func newDocEntry(doc Document) *docEntry {
 	return e
 }
 
-// resident returns the in-memory doc (loading from file if cold).
-// Caller must hold Store.mu.
+// resident devuelve el documento en memoria (lo carga del archivo si está frío).
+// El llamador debe tener tomado Store.mu.
 func (s *Store) resident(c *collection, id string) (Document, error) {
 	e, ok := c.entries[id]
 	if !ok {
@@ -37,8 +38,8 @@ func (s *Store) resident(c *collection, id string) (Document, error) {
 	return s.loadEntry(e)
 }
 
-// loadEntry materializes e.docP from the record log if cold.
-// Caller must hold Store.mu. May perform file I/O (full scans / cold hits).
+// loadEntry materializa e.docP desde el log de registros si está frío.
+// El llamador debe tener tomado Store.mu. Puede hacer E/S de archivo (recorridos completos / aciertos fríos).
 func (s *Store) loadEntry(e *docEntry) (Document, error) {
 	if d := e.docP.Load(); d != nil {
 		e.refBit.Store(true)
@@ -74,15 +75,15 @@ func (s *Store) loadEntry(e *docEntry) (Document, error) {
 	return doc, nil
 }
 
-// markEntryClean clears dirty after a successful flush if not re-mutated.
-// Caller must hold Store.mu.
+// markEntryClean limpia dirty tras un flush correcto si no se ha vuelto a mutar.
+// El llamador debe tener tomado Store.mu.
 func (e *docEntry) markEntryClean(stGen uint64) {
 	if e.mutGen <= stGen {
 		e.dirty.Store(false)
 	}
 }
 
-// CacheStats reports page-cache residency (M1).
+// CacheStats informa de la residencia de la caché de páginas (M1).
 type CacheStats struct {
 	Resident     int    `json:"resident"`
 	Cold         int    `json:"cold"`
@@ -92,7 +93,7 @@ type CacheStats struct {
 	TotalEntries int    `json:"total_entries"`
 }
 
-// CacheStats returns current cache occupancy. Safe under concurrent use.
+// CacheStats devuelve la ocupación actual de la caché. Seguro con uso concurrente.
 func (s *Store) CacheStats() CacheStats {
 	s.mu.RLock()
 	total := 0
@@ -120,8 +121,8 @@ func (s *Store) CacheStats() CacheStats {
 	}
 }
 
-// cacheAdmit registers e as resident under the byte budget (best-effort).
-// Never takes Store.mu (caller already holds it).
+// cacheAdmit registra e como residente respetando el presupuesto de bytes (mejor esfuerzo).
+// Nunca toma Store.mu (el llamador ya lo tiene).
 func (s *Store) cacheAdmit(e *docEntry) {
 	s.cacheMu.Lock()
 	defer s.cacheMu.Unlock()
@@ -136,19 +137,19 @@ func (s *Store) cacheAdmit(e *docEntry) {
 	s.evictLocked()
 }
 
-// evictLocked drops clean entries until under budget. Caller holds cacheMu.
+// evictLocked descarta entradas limpias hasta quedar por debajo del presupuesto. El llamador tiene cacheMu.
 func (s *Store) evictLocked() {
 	budget := s.opts.cacheBudget()
 	if budget <= 0 {
-		return // unlimited (CacheBytes < 0)
+		return // sin límite (CacheBytes < 0)
 	}
-	// No eviction for RAM-only stores or while a v1 rewrite is pending.
+	// No hay expulsión para almacenes solo RAM ni mientras hay una reescritura v1 pendiente.
 	if s.path == "" || s.noEvict.Load() {
 		return
 	}
 	for s.residentBytes > budget && len(s.cache) > 0 {
 		evicted := false
-		// Phase A: clean + refBit already clear.
+		// Fase A: limpio + refBit ya en claro.
 		for e := range s.cache {
 			if s.residentBytes <= budget {
 				return
@@ -162,7 +163,7 @@ func (s *Store) evictLocked() {
 		if s.residentBytes <= budget {
 			return
 		}
-		// Phase B: second chance — clear refBits.
+		// Fase B: segunda oportunidad — limpiar los refBits.
 		cleared := false
 		for e := range s.cache {
 			if e.refBit.Load() {
@@ -171,13 +172,13 @@ func (s *Store) evictLocked() {
 			}
 		}
 		if !cleared && !evicted {
-			return // all remaining dirty
+			return // todo lo que queda está sucio
 		}
 	}
 }
 
-// purgeCollCacheLocked removes every entry of c from the resident registry.
-// Caller must hold Store.mu (write) — takes cacheMu inside (s.mu → cacheMu).
+// purgeCollCacheLocked quita todas las entradas de c del registro de residentes.
+// El llamador debe tener Store.mu (escritura) — toma cacheMu por dentro (s.mu → cacheMu).
 func (s *Store) purgeCollCacheLocked(c *collection) {
 	s.cacheMu.Lock()
 	defer s.cacheMu.Unlock()
@@ -194,7 +195,7 @@ func (s *Store) purgeCollCacheLocked(c *collection) {
 	}
 }
 
-// evictEntryLocked clears the resident payload. Caller holds cacheMu.
+// evictEntryLocked libera la carga residente. El llamador tiene cacheMu.
 func (s *Store) evictEntryLocked(e *docEntry) {
 	if e.dirty.Load() {
 		return

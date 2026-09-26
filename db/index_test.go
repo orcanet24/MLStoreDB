@@ -11,7 +11,7 @@ func TestEnsureIndexAndList(t *testing.T) {
 	if err := s.EnsureIndex("q", []string{"status"}, false); err != nil {
 		t.Fatal(err)
 	}
-	// idempotent
+	// idempotente
 	if err := s.EnsureIndex("q", []string{"status"}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -34,12 +34,12 @@ func TestUniqueIndexBlocksDuplicate(t *testing.T) {
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("want ErrDuplicate, got %v", err)
 	}
-	// same _id re-insert still ErrDuplicate (already exists)
+	// volver a insertar el mismo _id sigue dando ErrDuplicate (ya existe)
 	err = s.Insert("q", Document{"_id": "1", "code": "B"})
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("_id dup: %v", err)
 	}
-	// different code ok
+	// otro código sí funciona
 	if err := s.Insert("q", Document{"_id": "3", "code": "B"}); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestUniqueIndexOnExistingDocs(t *testing.T) {
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("build unique on conflict: %v", err)
 	}
-	// no index left half-applied
+	// no queda ningún índice a medio aplicar
 	list, _ := s.ListIndexes("q")
 	if len(list) != 0 {
 		t.Errorf("indexes after failed build: %v", list)
@@ -70,12 +70,12 @@ func TestUniqueIndexOnUpdate(t *testing.T) {
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("update clash: %v", err)
 	}
-	// doc 2 unchanged
+	// el documento 2 no cambia
 	d, _ := s.Get("q", "2")
 	if d["code"] != "B" {
 		t.Errorf("rollback failed: %v", d)
 	}
-	// update to free value ok
+	// actualizar a un valor libre funciona
 	if err := s.Update("q", "2", Document{"code": "C"}); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestUniqueIndexOnUpsert(t *testing.T) {
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("upsert clash: %v", err)
 	}
-	// upsert same doc id with same code is fine
+	// upsert del mismo id con el mismo código es correcto
 	if err := s.Upsert("q", "1", Document{"code": "A"}); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestIndexMaintainedOnDelete(t *testing.T) {
 	if err := s.Delete("q", "1"); err != nil {
 		t.Fatal(err)
 	}
-	// code A free again
+	// el código A vuelve a estar libre
 	if err := s.Insert("q", Document{"_id": "2", "code": "A"}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,12 +134,12 @@ func TestCompoundUniqueIndex(t *testing.T) {
 	if err := s.EnsureIndex("m", []string{"user", "acct"}, true); err != nil {
 		t.Fatal(err)
 	}
-	// same pair blocked
+	// el mismo par queda bloqueado
 	err := s.Insert("m", Document{"_id": "2", "user": "u1", "acct": "a1"})
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("compound clash: %v", err)
 	}
-	// different second field ok
+	// otro segundo campo sí funciona
 	if err := s.Insert("m", Document{"_id": "3", "user": "u1", "acct": "a2"}); err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestFindUsesIndexEquality(t *testing.T) {
 	if err != nil || len(docs) != 5 {
 		t.Fatalf("indexed eq: %d %v", len(docs), err)
 	}
-	// planner used — result must equal full-scan semantics (already covered by other tests)
+	// se usó el planificador — el resultado debe ser igual a la semántica de recorrido completo (ya cubierto por otros tests)
 	docs, _ = s.Find("q", Document{"status": "NOPE"}, nil)
 	if len(docs) != 0 {
 		t.Errorf("miss: %v", ids(docs))
@@ -209,10 +209,10 @@ func TestNullAndMissingIndexSameSentinel(t *testing.T) {
 	_ = s.Insert("q", Document{"_id": "2"})
 	_ = s.Insert("q", Document{"_id": "3", "v": 1})
 	if err := s.EnsureIndex("q", []string{"v"}, true); err == nil {
-		// null + missing both sentinel → should clash on unique
+		// null y ausente son ambos centinela → deberían chocar en único
 		t.Fatal("expected unique clash null vs missing")
 	}
-	// non-unique is fine
+	// el no único está bien
 	if err := s.EnsureIndex("q", []string{"v"}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +220,7 @@ func TestNullAndMissingIndexSameSentinel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// implicit eq null matches missing too (match semantics)
+	// el eq implícito con null también coincide con ausente (semántica de match)
 	if len(docs) < 2 {
 		t.Errorf("null eq: %v", ids(docs))
 	}
@@ -231,13 +231,13 @@ func TestMultiValueArrayIndex(t *testing.T) {
 	_ = s.Insert("q", Document{"_id": "1", "tags": []any{"a", "b"}})
 	_ = s.Insert("q", Document{"_id": "2", "tags": []any{"b", "c"}})
 	if err := s.EnsureIndex("q", []string{"tags"}, true); err == nil {
-		// b appears in both → unique clash
+		// b aparece en ambos → choque de único
 		t.Fatal("expected array unique clash")
 	}
 	if err := s.EnsureIndex("q", []string{"tags"}, false); err != nil {
 		t.Fatal(err)
 	}
-	// index maintained: delete frees b for one doc
+	// el índice se mantiene: el borrado libera b para un documento
 	if err := s.Delete("q", "1"); err != nil {
 		t.Fatal(err)
 	}

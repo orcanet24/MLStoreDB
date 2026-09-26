@@ -13,17 +13,17 @@ import (
 	"time"
 )
 
-// M1 record-log format (formatVersion 2):
+// Formato del log de registros M1 (formatVersion 2):
 //
-//	[152B header][record]* and the last COMMIT record is the atomic commit point.
+//	[152B de cabecera][registro]* y el último registro COMMIT es el punto de confirmación atómico.
 //
-// Record layout (recHdrSize = 24):
+// Estructura de un registro (recHdrSize = 24):
 //
 //	type u8 | flags u8 | idLen u16 | payloadLen u32 | nonce [12] | crc u32
-//	id     [idLen]      — plaintext: u16be(collLen) || coll || docID
+//	id     [idLen]      — texto plano: u16be(collLen) || coll || docID
 //	payload[payloadLen] — AES-256-GCM(DEK, nonce, plain|zlib)
 //
-// CRC32 covers hdr[0:20] || id || payload.
+// El CRC32 cubre hdr[0:20] || id || payload.
 
 const (
 	recHdrSize = 24
@@ -34,17 +34,17 @@ const (
 	recDEL    = byte(4)
 	recCOMMIT = byte(5)
 
-	// per-record flags
+	// flags por registro
 	flagRecCompressed = byte(1 << 0)
 	flagRecSuspect    = byte(1 << 1)
 )
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
-// defaultCacheBytes: 256 MB resident budget when Options.CacheBytes is zero.
+// defaultCacheBytes: presupuesto residente de 256 MB cuando Options.CacheBytes es cero.
 const defaultCacheBytes = int64(256) << 20
 
-// cacheBudget resolves the resident byte budget. Negative = unlimited.
+// cacheBudget resuelve el presupuesto residente en bytes. Negativo = sin límite.
 func (o Options) cacheBudget() int64 {
 	if o.CacheBytes == 0 {
 		return defaultCacheBytes
@@ -55,40 +55,40 @@ func (o Options) cacheBudget() int64 {
 	return o.CacheBytes
 }
 
-// metaCollPayload is per-collection metadata inside the META record.
+// metaCollPayload son los metadatos por colección dentro del registro META.
 type metaCollPayload struct {
 	Indexes   []IndexInfo `json:"indexes"`
 	Sensitive []string    `json:"sensitive,omitempty"`
 }
 
-// metaPayload is the plaintext of a META record (authoritative schema for v2).
+// metaPayload es el texto plano de un registro META (esquema autoritativo para v2).
 type metaPayload struct {
-	App           string                  `json:"app"`
-	SchemaVersion uint64                  `json:"schema_version"`
+	App           string                     `json:"app"`
+	SchemaVersion uint64                     `json:"schema_version"`
 	Collections   map[string]metaCollPayload `json:"collections"`
 }
 
-// recOp is one record staged for the next flush.
+// recOp es un registro preparado para el próximo flush.
 type recOp struct {
 	typ     byte
 	coll    string
-	id      string // docID or "" for META/IDX/COMMIT
+	id      string // docID o "" para META/IDX/COMMIT
 	payload []byte
 	suspect bool
-	// idxFields identifies an IDX record (coll + fields+unique key).
+	// idxFields identifica un registro IDX (coll + clave de fields+unique).
 	idxFields []string
 	idxUnique bool
-	// outOff/outLen filled by the writer (full rewrite offsets).
+	// outOff/outLen los rellena el escritor (offsets de la reescritura completa).
 	outOff int64
 	outLen int32
 }
 
-// flushState is a consistent snapshot of store state for writing outside the lock.
+// flushState es una instantánea consistente del estado del almacén para escribir fuera del bloqueo.
 type flushState struct {
 	path          string
 	clearDirty    bool
 	gen           uint64
-	writeSeq      uint64 // s.writeSeq snapshot (M3 backpressure durable mark)
+	writeSeq      uint64 // instantánea de s.writeSeq (marca duradera de contrapresión M3)
 	dek           []byte
 	machine       []byte
 	salt          [16]byte
@@ -99,12 +99,12 @@ type flushState struct {
 	schemaVersion uint64
 	master        []byte
 
-	// v2 record staging
-	full  bool // rewrite whole file vs append
-	meta  metaPayload
-	ops   []recOp // ordered: [DELs] [DOCs] [META] [IDXs] [COMMIT] for full; incremental similar
-	dels  []delItem
-	// dirty entry bookkeeping for post-flush clean-up
+	// preparación de registros v2
+	full bool // reescribir todo el archivo o añadir al final
+	meta metaPayload
+	ops  []recOp // orden: [DELs] [DOCs] [META] [IDXs] [COMMIT] en reescritura completa; incremental similar
+	dels []delItem
+	// contabilidad de entradas sucias para la limpieza posterior al flush
 	flushedEntries []flushedRef
 }
 
@@ -144,7 +144,7 @@ func decodeIDBlob(b []byte) (coll, id string, err error) {
 	return string(b[2 : 2+cl]), string(b[2+cl:]), nil
 }
 
-// buildRecord assembles one full on-disk record (hdr+id+payload).
+// buildRecord ensambla un registro completo en disco (hdr+id+payload).
 func buildRecord(dek []byte, typ, flags byte, idBlob, plain []byte, suspect bool) ([]byte, error) {
 	body := plain
 	fl := flags
@@ -186,8 +186,8 @@ func buildRecord(dek []byte, typ, flags byte, idBlob, plain []byte, suspect bool
 	return out, nil
 }
 
-// parseRecordAt validates the record at data[off:]; returns parsed fields
-// and total record size. flags has flagRecSuspect/Compressed.
+// parseRecordAt valida el registro en data[off:]; devuelve los campos ya
+// interpretados y el tamaño total del registro. flags contiene flagRecSuspect/Compressed.
 func parseRecordAt(data []byte, off int) (typ, flags byte, idBlob, ct []byte, total int, err error) {
 	if off < 0 || off+recHdrSize > len(data) {
 		return 0, 0, nil, nil, 0, errRecTorn
@@ -204,8 +204,8 @@ func parseRecordAt(data []byte, off int) (typ, flags byte, idBlob, ct []byte, to
 	idBlob = data[off+recHdrSize : off+recHdrSize+idLen]
 	ct = data[off+recHdrSize+idLen : off+total]
 	want := binary.LittleEndian.Uint32(hdr[20:24])
-	// CRC covers hdr[0:20] || id || ct — id/ct sit AFTER the crc field, so
-	// they are not contiguous with hdr[0:20]; hash the two spans.
+	// El CRC cubre hdr[0:20] || id || ct — id/ct van DESPUÉS del campo crc, así que
+	// no son contiguos con hdr[0:20]; se aplica el hash a los dos tramos.
 	crc := crc32.New(crcTable)
 	crc.Write(data[off : off+20])
 	crc.Write(idBlob)
@@ -216,10 +216,10 @@ func parseRecordAt(data []byte, off int) (typ, flags byte, idBlob, ct []byte, to
 	return typ, flags, idBlob, ct, total, nil
 }
 
-// errRecTorn marks an incomplete tail (crash mid-write) — self-heal by truncate.
+// errRecTorn marca una cola incompleta (caída a mitad de escritura) — se autocorrige truncando.
 var errRecTorn = errors.New("db: torn record tail")
 
-// decodePayload decrypts (+ optional zlib) a record payload.
+// decodePayload descifra (y opcionalmente descomprime con zlib) la carga de un registro.
 func decodePayload(dek []byte, flags byte, nonce, ct []byte) ([]byte, error) {
 	if len(ct) == 0 {
 		return nil, nil
@@ -234,36 +234,36 @@ func decodePayload(dek []byte, flags byte, nonce, ct []byte) ([]byte, error) {
 	return plain, nil
 }
 
-// openRead opens path for random reads.
+// openRead abre path para lecturas aleatorias.
 func openRead(path string) (*os.File, error) {
 	return os.Open(path)
 }
 
-// scanResult is the outcome of scanning a v2 record log.
+// scanResult es el resultado de escanear un log de registros v2.
 type scanResult struct {
-	commitEnd   int64 // end offset of last COMMIT (apply boundary)
-	truncated   int64 // if >0, file should be truncated to this size
-	suspect     bool
-	meta        *metaPayload
-	docs        []scannedDoc
-	dels        map[string]struct{} // coll\x00id
-	idxByColl   map[string][]idxPayload
-	metaSeen    bool
-	idxSeen     map[string]bool // "coll\x00fields\x00unique"
+	commitEnd int64 // offset final del último COMMIT (frontera de aplicación)
+	truncated int64 // si es >0, el archivo debe truncarse a este tamaño
+	suspect   bool
+	meta      *metaPayload
+	docs      []scannedDoc
+	dels      map[string]struct{} // coll\x00id
+	idxByColl map[string][]idxPayload
+	metaSeen  bool
+	idxSeen   map[string]bool // "coll\x00fields\x00unique"
 }
 
 type scannedDoc struct {
 	coll    string
 	id      string
-	off     int64 // absolute record offset
+	off     int64 // offset absoluto del registro
 	length  int32
 	flags   byte
 	nonce   [12]byte
-	payload []byte // raw ciphertext slice (subslice of file data — copy)
+	payload []byte // slice del criptograma crudo (subslice de los datos del archivo — hay que copiarlo)
 }
 
-// scanV2 parses records from data (full file bytes including header).
-// Applies only records up to the last COMMIT; detects torn tails and suspects.
+// scanV2 interpreta los registros de data (todos los bytes del archivo, cabecera incluida).
+// Solo aplica los registros hasta el último COMMIT; detecta colas cortadas y registros sospechosos.
 func scanV2(data []byte, dek []byte) (*scanResult, error) {
 	res := &scanResult{
 		dels:      map[string]struct{}{},
@@ -272,23 +272,23 @@ func scanV2(data []byte, dek []byte) (*scanResult, error) {
 	}
 	off := int64(headerSize)
 	var lastCommit int64 = -1
-	// First pass: walk all complete records, note COMMIT boundaries.
+	// Primera pasada: recorrer todos los registros completos y anotar las fronteras COMMIT.
 	type applied struct {
-		typ     byte
-		flags   byte
-		idBlob  []byte
-		ct      []byte
-		nonce   [12]byte
-		recOff  int64
-		recLen  int32
+		typ    byte
+		flags  byte
+		idBlob []byte
+		ct     []byte
+		nonce  [12]byte
+		recOff int64
+		recLen int32
 	}
 	var recs []applied
 	for off < int64(len(data)) {
 		typ, flags, idBlob, ct, total, err := parseRecordAt(data, int(off))
 		if errors.Is(err, errRecTorn) {
-			// Durable files are written atomically through COMMIT (full rewrite)
-			// or appended after an existing COMMIT. A torn head with no prior
-			// COMMIT means corruption/truncation, not a recoverable append tear.
+			// Los archivos duraderos se escriben de forma atómica hasta COMMIT (reescritura
+			// completa) o se añaden después de un COMMIT existente. Un comienzo cortado sin
+			// ningún COMMIT previo indica corrupción/truncamiento, no una cola recuperable.
 			if lastCommit < 0 && off == int64(headerSize) {
 				return nil, ErrCorrupt
 			}
@@ -310,15 +310,15 @@ func scanV2(data []byte, dek []byte) (*scanResult, error) {
 		off += int64(total)
 	}
 	if lastCommit < 0 {
-		// No COMMIT: nothing durable (or torn first flush). Truncate to header.
+		// Sin COMMIT: nada duradero (o primer flush cortado). Truncar a la cabecera.
 		res.truncated = int64(headerSize)
 		if res.truncated < int64(len(data)) && len(data) > headerSize {
-			// keep truncation request
+			// mantener la petición de truncado
 		}
 		return res, nil
 	}
 	res.commitEnd = lastCommit
-	// Second pass: apply records with recOff < lastCommit.
+	// Segunda pasada: aplicar los registros con recOff < lastCommit.
 	for _, r := range recs {
 		if r.recOff+int64(r.recLen) > lastCommit {
 			break
@@ -328,7 +328,7 @@ func scanV2(data []byte, dek []byte) (*scanResult, error) {
 		}
 		switch r.typ {
 		case recCOMMIT:
-			// boundary only
+			// solo la frontera
 		case recMETA:
 			plain, err := decodePayload(dek, r.flags, r.nonce[:], r.ct)
 			if err != nil {
@@ -364,7 +364,7 @@ func scanV2(data []byte, dek []byte) (*scanResult, error) {
 			if err != nil {
 				return nil, err
 			}
-			// copy payload bytes (data may be reused conceptually)
+			// copiar los bytes de la carga (data podría reutilizarse conceptualmente)
 			ctCopy := append([]byte(nil), r.ct...)
 			res.docs = append(res.docs, scannedDoc{
 				coll: coll, id: id, off: r.recOff, length: r.recLen,
@@ -377,17 +377,17 @@ func scanV2(data []byte, dek []byte) (*scanResult, error) {
 			}
 			res.dels[coll+"\x00"+id] = struct{}{}
 		default:
-			// unknown type: ignore (forward compat within same major)
+			// tipo desconocido: ignorar (compatibilidad futura dentro de la misma versión mayor)
 		}
 	}
-	// Apply DELs over docs (delete wins if same key appears before del in log —
-	// bitcask: last write wins by scan order; we applied in order, so re-apply dels
-	// that come after a doc in recs order).
+	// Aplicar los DELs sobre los documentos (gana el borrado si la misma clave aparece
+	// antes que el "del" en el log — bitcask: gana la última escritura según el orden de
+	// escaneo; aquí se aplicó en orden, así que se reaplican los DEL que van después de un DOC).
 	pos := map[string]int{}
 	for i, d := range res.docs {
 		pos[d.coll+"\x00"+d.id] = i
 	}
-	// Re-walk applied order for DOC/DEL interleaving:
+	// Recorrer de nuevo el orden aplicado para intercalar DOC/DEL:
 	live := make([]scannedDoc, 0, len(res.docs))
 	alive := map[string]bool{}
 	deleted := map[string]bool{}
@@ -423,8 +423,8 @@ func idxKey(coll string, fields []string, unique bool) string {
 	return coll + "\x00" + fmt.Sprint(fields) + "\x00" + fmt.Sprintf("%v", unique)
 }
 
-// eagerV2 rebuilds a fileData from scanned records + decrypted payloads and
-// runs loadFileData semantics (ErrNoID / ErrDuplicate on suspect files).
+// eagerV2 reconstruye un fileData a partir de los registros escaneados y sus cargas
+// descifradas, y aplica la semántica de loadFileData (ErrNoID / ErrDuplicate si hay sospechas).
 func (s *Store) eagerV2(res *scanResult, dek []byte) (*fileData, error) {
 	fd := &fileData{
 		Meta:        fileMeta{App: "mlstoredb"},
@@ -461,8 +461,8 @@ func (s *Store) eagerV2(res *scanResult, dek []byte) (*fileData, error) {
 		fc := ensure(d.coll)
 		fc.Docs = append(fc.Docs, doc)
 	}
-	// stable order for deterministic dup-keep is handled by loadFileData via map;
-	// sort docs by id for determinism.
+	// El orden estable para elegir duplicados de forma determinista lo gestiona
+	// loadFileData con un mapa; aquí se ordenan los documentos por id para ser deterministas.
 	for _, fc := range fd.Collections {
 		sort.SliceStable(fc.Docs, func(i, j int) bool {
 			a, _ := fc.Docs[i]["_id"].(string)
@@ -473,7 +473,7 @@ func (s *Store) eagerV2(res *scanResult, dek []byte) (*fileData, error) {
 	return fd, nil
 }
 
-// decodeDocRecord parses a full raw record (from loadEntry) into a Document.
+// decodeDocRecord convierte un registro crudo completo (de loadEntry) en un Document.
 func (s *Store) decodeDocRecord(raw []byte) (Document, error) {
 	typ, flags, _, ct, total, err := parseRecordAt(raw, 0)
 	if err != nil || typ != recDOC || total != len(raw) {
@@ -492,7 +492,7 @@ func (s *Store) decodeDocRecord(raw []byte) (Document, error) {
 	return doc, nil
 }
 
-// buildMeta snapshots schema + collection defs for the META record.
+// buildMeta toma una instantánea del esquema y de las definiciones de colecciones para el registro META.
 func (s *Store) buildMetaLocked() metaPayload {
 	m := metaPayload{
 		App:           "mlstoredb",
@@ -512,8 +512,8 @@ func (s *Store) buildMetaLocked() metaPayload {
 	return m
 }
 
-// stageDocOp marshals doc and builds a DOC recOp (sets suspect when _id or
-// index coverage looks wrong at write time).
+// stageDocOp serializa el documento y construye un recOp DOC (marca sospechoso
+// cuando el _id o la cobertura de índices parece incorrecta al escribir).
 func stageDocOp(dek []byte, coll string, id string, doc Document, c *collection) (recOp, error) {
 	plain, err := json.Marshal(doc)
 	if err != nil {
@@ -542,8 +542,9 @@ func stageDocOp(dek []byte, coll string, id string, doc Document, c *collection)
 	}, nil
 }
 
-// prepareFlush snapshots store state under s.mu (brief write lock for crypto
-// first-time params, then R/Lock for content). Returns nil,nil when no-op.
+// prepareFlush toma una instantánea del estado del almacén bajo s.mu (bloqueo de escritura
+// breve para los parámetros criptográficos iniciales y luego R/Lock para el contenido).
+// Devuelve nil,nil cuando no hay nada que hacer.
 func (s *Store) prepareFlush(path string, clearDirty bool) (*flushState, error) {
 	if path == "" {
 		return nil, nil
@@ -605,8 +606,8 @@ func (s *Store) prepareFlush(path string, clearDirty bool) (*flushState, error) 
 		master:        append([]byte(nil), s.opts.MasterKey...),
 	}
 
-	// Full rewrite when the file has no durable v2 body yet, a migration is
-	// pending, or Compact/Repair forced it. Snapshots to a new dest are full.
+	// Reescritura completa cuando el archivo aún no tiene un cuerpo v2 duradero, hay una
+	// migración pendiente o Compact/Repair lo forzó. Las instantáneas a un destino nuevo son completas.
 	isSnapshotDest := clearDirty == false && st.path != s.path
 	wantCompact := s.compactForce
 	full := !s.sawFile || s.v1Migration || wantCompact || isSnapshotDest || s.path == ""
@@ -617,17 +618,17 @@ func (s *Store) prepareFlush(path string, clearDirty bool) (*flushState, error) 
 		}
 	}
 	if full && clearDirty {
-		s.v1Migration = false // consume: this flush rewrites as v2
+		s.v1Migration = false // se consume: este flush reescribe como v2
 		s.noEvict.Store(false)
 	}
 	st.full = full
 
 	st.meta = s.buildMetaLocked()
 
-	// Stage ops under the same lock (content snapshot).
+	// Preparar las operaciones bajo el mismo bloqueo (instantánea del contenido).
 	st.dels = append([]delItem(nil), s.pendingDels...)
 	if full {
-		// DELs are meaningless on rewrite (fresh body); docs come from entries.
+		// Los DELs no tienen sentido en una reescritura (cuerpo nuevo); los documentos salen de entries.
 		st.dels = nil
 	}
 
@@ -645,7 +646,7 @@ func (s *Store) prepareFlush(path string, clearDirty bool) (*flushState, error) 
 		}
 		sort.Strings(ids)
 
-		// INDEX records: full serialize each flush (design M1).
+		// Registros INDEX: serialización completa en cada flush (diseño M1).
 		for _, idx := range c.indexes {
 			p := idx.serialize()
 			p.Coll = name
@@ -675,7 +676,7 @@ func (s *Store) prepareFlush(path string, clearDirty bool) (*flushState, error) 
 			}
 			doc, err := s.loadEntry(e)
 			if err != nil {
-				// Cold entry with no record (shouldn't happen when dirty)
+				// Entrada fría sin registro (no debería ocurrir si está sucia)
 				if errors.Is(err, ErrNotFound) {
 					continue
 				}
@@ -702,14 +703,14 @@ func (s *Store) prepareFlush(path string, clearDirty bool) (*flushState, error) 
 		}
 	}
 
-	// Order: DELs, DOCs, META, IDXs, COMMIT (buildCommit assembles).
-	// Currently ops are IDX-then-DOC interleaved per coll; rewrite order below.
+	// Orden: DELs, DOCs, META, IDXs, COMMIT (los ensambla buildCommit).
+	// Ahora mismo las operaciones van IDX y luego DOC intercalados por colección; abajo se reordenan.
 	st.ops = orderOpsForCommit(st.dels, st.ops, st.meta, st.gen, st.dek)
 	s.mu.Unlock()
 	return st, nil
 }
 
-// orderOpsForCommit sorts staged ops into durable write order and appends META+COMMIT.
+// orderOpsForCommit ordena las operaciones preparadas en el orden de escritura duradero y añade META+COMMIT.
 func orderOpsForCommit(dels []delItem, ops []recOp, meta metaPayload, gen uint64, dek []byte) []recOp {
 	var docOps, idxOps, metaOps, delOps []recOp
 	for _, op := range ops {
@@ -719,7 +720,7 @@ func orderOpsForCommit(dels []delItem, ops []recOp, meta metaPayload, gen uint64
 		case recIDX:
 			idxOps = append(idxOps, op)
 		case recMETA, recCOMMIT, recDEL:
-			// none yet
+			// todavía ninguno
 		}
 	}
 	for _, d := range dels {
@@ -735,7 +736,7 @@ func orderOpsForCommit(dels []delItem, ops []recOp, meta metaPayload, gen uint64
 		metaOps = append(metaOps, recOp{typ: recMETA, payload: mj})
 	}
 	commit := recOp{typ: recCOMMIT, payload: nil}
-	// gen unused in payload; COMMIT is empty plaintext.
+	// gen no se usa en la carga; el COMMIT es texto plano vacío.
 	_ = gen
 	_ = dek
 	out := make([]recOp, 0, len(delOps)+len(docOps)+len(metaOps)+len(idxOps)+1)
@@ -747,14 +748,14 @@ func orderOpsForCommit(dels []delItem, ops []recOp, meta metaPayload, gen uint64
 	return out
 }
 
-// encodeRecordBytes serializes one staged op to disk bytes.
+// encodeRecordBytes serializa una operación preparada a los bytes de disco.
 func encodeRecordBytes(dek []byte, op recOp) ([]byte, error) {
 	var idBlob []byte
 	switch op.typ {
 	case recDOC, recDEL:
 		idBlob = encodeIDBlob(op.coll, op.id)
 	case recIDX:
-		// id blob: coll only (payload carries fields/unique); keep coll for debug
+		// blob del id: solo coll (la carga lleva fields/unique); se mantiene coll para depurar
 		idBlob = encodeIDBlob(op.coll, "")
 	case recMETA, recCOMMIT:
 		idBlob = nil
@@ -764,7 +765,7 @@ func encodeRecordBytes(dek []byte, op recOp) ([]byte, error) {
 	return buildRecord(dek, op.typ, 0, idBlob, op.payload, op.suspect)
 }
 
-// buildHeaderV2 constructs the cleartext header for a v2 file.
+// buildHeaderV2 construye la cabecera en claro de un archivo v2.
 func buildHeaderV2(st *flushState) (*header, error) {
 	kek := deriveKEK(st.master, st.machine, st.salt[:], st.kdfTime, st.kdfMem, st.kdfPar)
 	wrapNonce := st.salt[:12]
@@ -781,7 +782,7 @@ func buildHeaderV2(st *flushState) (*header, error) {
 	}
 	h := &header{
 		FormatVer:     formatVersion, // 2
-		Flags:         0,             // per-record compression; no whole-payload flag
+		Flags:         0,             // compresión por registro; no hay flag para toda la carga
 		SchemaVersion: st.schemaVersion,
 		CreatedAt:     st.created,
 		UpdatedAt:     uint64(time.Now().Unix()),
@@ -796,7 +797,7 @@ func buildHeaderV2(st *flushState) (*header, error) {
 	return h, nil
 }
 
-// writeState serializes and writes st.path (v2 record log). No store lock.
+// writeState serializa y escribe st.path (log de registros v2). Sin bloqueo del almacén.
 func writeState(st *flushState) error {
 	if st == nil {
 		return nil
@@ -864,15 +865,16 @@ func appendV2(st *flushState) error {
 	return err
 }
 
-// openV2 loads an existing formatVersion≥2 file: scan, maybe eager, build entries.
-// Caller has authenticated header and unwrapped dek. data is the full file.
+// openV2 carga un archivo existente con formatVersion>=2: escanea, quizá hace una carga
+// "eager" y construye las entradas. El llamador ya autenticó la cabecera y desenvolvió la dek.
+// data son todos los bytes del archivo.
 func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 	res, err := scanV2(data, dek)
 	if err != nil {
 		return err
 	}
-	// Truncate torn/uncommitted tail (self-heal) — only when we own the path
-	// and will rewrite eventually; do it eagerly so the log ends at COMMIT.
+	// Truncar la cola cortada/sin confirmar (autocorrección) — solo cuando somos dueños del
+	// path y acabaremos reescribiendo; se hace ya para que el log termine en un COMMIT.
 	if res.truncated > 0 && res.truncated < int64(len(data)) {
 		if err := truncateFile(s.path, res.truncated); err != nil {
 			return err
@@ -880,7 +882,7 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 	}
 
 	suspect := res.suspect
-	// META vs IDX consistency → eager rebuild.
+	// Coherencia META vs IDX → reconstrucción "eager".
 	needEager := suspect
 	if res.meta != nil {
 		for name, mc := range res.meta.Collections {
@@ -899,12 +901,13 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 		if err := s.loadFileData(fd); err != nil {
 			return err
 		}
-		// All docs resident; mark for rewrite only if suspect/mismatch needs it.
-		// Suspect or missing IDX means on-disk index state is untrustworthy —
-		// keep dirty so next Flush rewrites clean (also covers repair expectations).
+		// Todos los documentos residentes; solo se marca para reescritura si la sospecha o el
+		// desajuste lo exigen. Un IDX sospechoso o ausente implica que el estado de índices en
+		// disco no es fiable: se mantiene sucio para que el próximo Flush reescriba limpio
+		// (también cubre las expectativas de Repair).
 		s.dirty = true
 		s.dirtyGen++
-		s.v1Migration = true // force full rewrite path (reuse flag)
+		s.v1Migration = true // forzar el camino de reescritura completa (se reutiliza el flag)
 		s.noEvict.Store(true)
 		s.sawFile = true
 		copy(s.kdfSalt[:], h.KDFSalt[:])
@@ -922,13 +925,13 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 		return nil
 	}
 
-	// Normal path: cold entries + META defs + IDX rows.
+	// Camino normal: entradas frías + definiciones META + filas IDX.
 	if res.meta != nil {
 		s.schemaVersion = res.meta.SchemaVersion
 	} else {
 		s.schemaVersion = h.SchemaVersion
 	}
-	// collections from meta ∪ docs
+	// colecciones desde meta ∪ docs
 	seenColl := map[string]*collection{}
 	getColl := func(name string) *collection {
 		c, ok := seenColl[name]
@@ -953,16 +956,16 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 		}
 	}
 
-	// Attach IDX payloads to collections (structure mismatch → eager already checked defs).
+	// Adjuntar las cargas IDX a las colecciones (si hay desajuste estructural, la carga "eager" ya validó las definiciones).
 	for coll, list := range res.idxByColl {
 		if res.meta != nil {
 			if _, ok := res.meta.Collections[coll]; !ok {
-				continue // dropped after an earlier flush (M8 DropCollection)
+				continue // se eliminó tras un flush anterior (M8 DropCollection)
 			}
 		}
 		c := getColl(coll)
 		for _, p := range list {
-			// Find matching def index or create.
+			// Buscar el índice con la definición coincidente o crearlo.
 			var target *index
 			for _, idx := range c.indexes {
 				if sameFields(idx.Fields, p.Fields) && idx.Unique == p.Unique {
@@ -971,12 +974,12 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 				}
 			}
 			if target == nil {
-				// def missing from META — structural issue → eager
+				// falta la definición en META — problema estructural → carga "eager"
 				fd, eerr := s.eagerV2(res, dek)
 				if eerr != nil {
 					return eerr
 				}
-				// reset partial state
+				// reiniciar el estado parcial
 				s.collections = map[string]*collection{}
 				if err := s.loadFileData(fd); err != nil {
 					return err
@@ -1018,10 +1021,10 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 		}
 	}
 
-	// Index defs without IDX payload → eager (handled above via idxSeen check).
+	// Definiciones de índice sin carga IDX → carga "eager" (ya se trata arriba con la comprobación idxSeen).
 
-	// Doc entries (cold). META-gated: records for collections absent from
-	// the last META belong to dropped collections (M8 DropCollection).
+	// Entradas de documentos (frías). Condicionadas por META: los registros de
+	// colecciones ausentes en el último META pertenecen a colecciones eliminadas (M8 DropCollection).
 	for _, d := range res.docs {
 		if res.meta != nil {
 			if _, ok := res.meta.Collections[d.coll]; !ok {
@@ -1029,7 +1032,7 @@ func (s *Store) openV2(data []byte, h *header, dek []byte) error {
 			}
 		}
 		c := getColl(d.coll)
-		e := newDocEntry(nil) // cold
+		e := newDocEntry(nil) // frío
 		e.recOff.Store(d.off)
 		e.recLen.Store(d.length)
 		c.entries[d.id] = e
@@ -1052,17 +1055,17 @@ func truncateFile(path string, size int64) error {
 	return os.Truncate(path, size)
 }
 
-// prepareV1Migration is called from the v1 Open path after loadFileData.
+// prepareV1Migration se llama desde el camino de Open v1 después de loadFileData.
 func (s *Store) prepareV1Migration() {
 	s.v1Migration = true
 	s.noEvict.Store(true)
 	s.dirty = true
 	s.dirtyGen++
-	// All docs from loadFileData are resident; give them valid entries (done
-	// by loadFileData). recOff stays -1 until the migration full rewrite.
+	// Todos los documentos de loadFileData están residentes; se les dan entradas válidas
+	// (lo hace loadFileData). recOff se queda en -1 hasta la reescritura completa de la migración.
 }
 
-// Compact rewrites the file as a tight v2 log (drops dead bytes / old versions).
+// Compact reescribe el archivo como un log v2 compacto (elimina bytes muertos / versiones antiguas).
 func (s *Store) Compact() error {
 	if err := s.compact(); err != nil {
 		return err

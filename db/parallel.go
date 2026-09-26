@@ -4,16 +4,18 @@ import (
 	"sync"
 )
 
-// parallelMinIDs is the candidate-count threshold for spawning Find workers.
+// parallelMinIDs es el umbral de número de candidatos para lanzar workers de Find.
 const parallelMinIDs = 512
 
-// materializeRefs loads resident docs for ids (optionally rematching filter)
-// under the caller's s.mu.RLock. Workers never touch s.mu/flushMu — only
-// loadEntry/match/index internals (idx.mu, cacheMu) which nest correctly.
+// materializeRefs carga los documentos residentes de los ids (opcionalmente
+// reevaluando el filtro) bajo el s.mu.RLock del llamador. Los workers nunca tocan
+// s.mu/flushMu — solo los internos de loadEntry/match/index (idx.mu, cacheMu), que
+// se anidan correctamente.
 //
-// Order: results are concatenated per contiguous id-chunk in input order, so
-// plan.order and sorted-id full scans keep their relative order without a
-// re-sort. First non-nil error wins (match errors e.g. bad regex).
+// Orden: los resultados se concatenan por trozo contiguo de ids en el orden de
+// entrada, de modo que plan.order y los recorridos completos de ids ordenados conservan
+// su orden relativo sin volver a ordenar. Gana el primer error no nil (errores de
+// evaluación, por ejemplo un regex inválido).
 func (s *Store) materializeRefs(c *collection, ids []string, filter Document, rematch bool) ([]Document, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -22,7 +24,7 @@ func (s *Store) materializeRefs(c *collection, ids []string, filter Document, re
 	if workers <= 1 || len(ids) < parallelMinIDs {
 		return s.materializeRefsSerial(c, ids, filter, rematch)
 	}
-	// Chunk so each worker gets a contiguous slice of the input order.
+	// Trocear para que cada worker reciba una porción contigua del orden de entrada.
 	n := len(ids)
 	chunk := (n + workers - 1) / workers
 	if chunk < parallelMinIDs {
@@ -80,7 +82,7 @@ func (s *Store) materializeRefsSerial(c *collection, ids []string, filter Docume
 	return refs, nil
 }
 
-// countMatches is the Count twin of materializeRefs (no Document retention).
+// countMatches es el gemelo para Count de materializeRefs (no retiene Document).
 func (s *Store) countMatches(c *collection, ids []string, filter Document, rematch bool) (int, error) {
 	refs, err := s.materializeRefs(c, ids, filter, rematch)
 	if err != nil {

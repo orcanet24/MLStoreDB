@@ -20,66 +20,66 @@ import (
 
 const (
 	magicStr = "MLDB"
-	// formatVersion 2 = header + append-only record log (M1).
+	// formatVersion 2 = cabecera + log de registros solo-añadir (M1).
 	formatVersion = uint16(2)
-	// headerSize: body 120B + HMAC 32B. dek_wrapped = 32B DEK + 16B GCM tag.
+	// headerSize: cuerpo de 120B + HMAC 32B. dek_wrapped = 32B de DEK + 16B de tag GCM.
 	headerSize     = 152
 	headerBodySize = 120
 	flagCompressed = uint16(1 << 0)
 
-	// Argon2id defaults (stored per-file in header).
+	// Valores por defecto de Argon2id (se guardan por archivo en la cabecera).
 	defaultKDFTime = uint32(1)
 	defaultKDFMem  = uint32(64 * 1024) // KiB
 	defaultKDFPar  = uint32(4)
-	// Light params for tests / embedded low-RAM (still recorded in header).
+	// Parámetros ligeros para tests / entornos embebidos con poca RAM (se siguen registrando en la cabecera).
 	lightKDFTime = uint32(1)
 	lightKDFMem  = uint32(8 * 1024)
 	lightKDFPar  = uint32(1)
 
-	// Auto-flush and lock defaults (overridable via Options.AutoFlush/LockFile).
+	// Valores por defecto de auto-flush y bloqueo (sobrescribibles con Options.AutoFlush/LockFile).
 	defaultAutoFlush    = 2 * time.Second
 	defaultLockFileName = "mlstoredb.lock"
 )
 
-// Options for Open/Flush crypto material.
+// Options contiene el material criptográfico para Open/Flush.
 type Options struct {
-	// MasterKey is the provider secret (KEK input). Required for encrypted files.
+	// MasterKey es el secreto del proveedor (entrada de la KEK). Obligatoria en archivos cifrados.
 	MasterKey []byte
-	// MachineID mixes into KEK (DESIGN §4.3). Empty = "default".
-	// See ResolveMachineID for a per-installation random identity.
+	// MachineID se mezcla en la KEK (DESIGN §4.3). Vacío = "default".
+	// Ver ResolveMachineID para obtener una identidad aleatoria por instalación.
 	MachineID string
-	// LightKDF uses faster Argon2 params (tests). Ignored when reopening existing file.
+	// LightKDF usa parámetros Argon2 más rápidos (tests). Se ignora al reabrir un archivo existente.
 	LightKDF bool
-	// SyncOnWrite makes every successful mutation call FlushSync before
-	// returning (durable, slower). Use for tokens/settings; leave false for
-	// bulk sync where the auto-flush is enough.
+	// SyncOnWrite hace que cada mutación correcta llame a FlushSync antes de
+	// retornar (duradero, más lento). Úsalo para tokens/ajustes; déjalo en false
+	// para sincronización masiva, donde el auto-flush es suficiente.
 	SyncOnWrite bool
-	// AutoFlush is the ticker period for the background flush started by
-	// OpenWithLock (dirty data only). Zero or negative = default 2s.
-	// Use shorter periods for durability-sensitive caches; longer ones to
-	// reduce write amplification on mostly-read workloads.
+	// AutoFlush es el periodo del ticker del flush en segundo plano que inicia
+	// OpenWithLock (solo datos sucios). Cero o negativo = 2s por defecto.
+	// Usa periodos cortos para cachés sensibles a la durabilidad y largos para
+	// reducir la amplificación de escritura en cargas mayoritariamente de lectura.
 	AutoFlush time.Duration
-	// LockFile is the name of the process lock file created in the database
-	// directory by OpenWithLock/Repair. Empty = default "mlstoredb.lock".
-	// Give different names to open different databases independently in the
-	// same directory (one lock file per database file).
+	// LockFile es el nombre del archivo de bloqueo de proceso que crean
+	// OpenWithLock/Repair en el directorio de la base de datos. Vacío = "mlstoredb.lock".
+	// Usa nombres distintos para abrir bases de datos diferentes de forma
+	// independiente en el mismo directorio (un archivo de bloqueo por base de datos).
 	LockFile string
-	// CacheBytes is the resident page-cache budget for cold documents.
-	// Zero = default 256 MiB. Negative = unlimited (no eviction).
+	// CacheBytes es el presupuesto de caché de páginas residente para documentos fríos.
+	// Cero = 256 MiB por defecto. Negativo = sin límite (sin expulsión).
 	CacheBytes int64
-	// FindWorkers bounds parallel Find/Count materialization (M3).
-	// Zero = GOMAXPROCS. Negative = 1 (fully serial). Positive = n workers.
+	// FindWorkers acota la materialización en paralelo de Find/Count (M3).
+	// Cero = GOMAXPROCS. Negativo = 1 (totalmente serie). Positivo = n workers.
 	FindWorkers int
-	// MaxPendingWrites enables write backpressure while a flush is in
-	// progress (M3): writers block once (writeSeq-durableSeq) reaches this
-	// many mutations, until the flush completes. Zero = unlimited (legacy).
+	// MaxPendingWrites activa la contrapresión de escritura mientras hay un flush
+	// en curso (M3): los escritores se bloquean cuando (writeSeq-durableSeq) alcanza
+	// ese número de mutaciones, hasta que el flush termina. Cero = sin límite (heredado).
 	MaxPendingWrites int
-	// SessionTTL bounds sessions from Authenticate (M4). Zero = default 24h.
-	// Negative = sessions never expire (until Revoke/ChangePassword/Close).
+	// SessionTTL acota la vida de las sesiones de Authenticate (M4). Cero = 24h por defecto.
+	// Negativo = las sesiones nunca caducan (hasta Revoke/ChangePassword/Close).
 	SessionTTL time.Duration
 }
 
-// findWorkers resolves the parallel Find worker count.
+// findWorkers resuelve el número de workers paralelos de Find.
 func (o Options) findWorkers() int {
 	if o.FindWorkers > 0 {
 		return o.FindWorkers
@@ -94,7 +94,7 @@ func (o Options) findWorkers() int {
 	return n
 }
 
-// maxPendingWrites resolves the write-backpressure limit (0 = unlimited).
+// maxPendingWrites resuelve el límite de contrapresión de escritura (0 = sin límite).
 func (o Options) maxPendingWrites() int {
 	if o.MaxPendingWrites > 0 {
 		return o.MaxPendingWrites
@@ -102,7 +102,7 @@ func (o Options) maxPendingWrites() int {
 	return 0
 }
 
-// autoFlushInterval resolves the configured auto-flush period.
+// autoFlushInterval resuelve el periodo de auto-flush configurado.
 func (o Options) autoFlushInterval() time.Duration {
 	if o.AutoFlush > 0 {
 		return o.AutoFlush
@@ -110,7 +110,7 @@ func (o Options) autoFlushInterval() time.Duration {
 	return defaultAutoFlush
 }
 
-// lockFileName resolves the process lock file name.
+// lockFileName resuelve el nombre del archivo de bloqueo de proceso.
 func (o Options) lockFileName() string {
 	if o.LockFile != "" {
 		return o.LockFile
@@ -118,7 +118,7 @@ func (o Options) lockFileName() string {
 	return defaultLockFileName
 }
 
-// sessionTTL resolves the Authenticate session lifetime (0=default, <0=never).
+// sessionTTL resuelve la vida de las sesiones de Authenticate (0=por defecto, <0=nunca).
 func (o Options) sessionTTL() time.Duration {
 	if o.SessionTTL == 0 {
 		return defaultSessionTTL
@@ -138,7 +138,7 @@ func (o Options) machineID() []byte {
 	return []byte(o.MachineID)
 }
 
-// header is the cleartext prefix of the .mlstore file (DESIGN §4.1).
+// header es el prefijo en claro del archivo .mlstore (DESIGN §4.1).
 type header struct {
 	FormatVer     uint16
 	Flags         uint16
@@ -150,7 +150,7 @@ type header struct {
 	KDFMemKiB     uint32
 	KDFPar        uint32
 	NonceBase     [12]byte
-	DEKWrapped    [48]byte // AES-GCM(32B DEK) = 32 + 16 tag
+	DEKWrapped    [48]byte // AES-GCM(32B de DEK) = 32 + 16 de tag
 	HeaderHMAC    [32]byte
 }
 
@@ -188,7 +188,7 @@ func openGCM(key, nonce, ciphertext, additionalData []byte) ([]byte, error) {
 }
 
 func (h *header) marshalBody() []byte {
-	// bytes [0..headerBodySize) for HMAC (everything before HeaderHMAC)
+	// bytes [0..headerBodySize) para el HMAC (todo lo anterior a HeaderHMAC)
 	buf := make([]byte, headerBodySize)
 	copy(buf[0:4], magicStr)
 	binary.LittleEndian.PutUint16(buf[4:6], h.FormatVer)
@@ -248,8 +248,8 @@ func parseHeader(data []byte) (*header, error) {
 	return h, nil
 }
 
-// fileColl / fileData = plaintext_v1 (DESIGN §4.2) — still used for v1 reads
-// and for the eager repair/rebuild path over v2 records.
+// fileColl / fileData = plaintext_v1 (DESIGN §4.2) — se siguen usando para las
+// lecturas v1 y para el camino de reparación/reconstrucción "eager" sobre registros v2.
 type fileData struct {
 	Meta        fileMeta             `json:"meta"`
 	Collections map[string]*fileColl `json:"collections"`
@@ -266,14 +266,14 @@ type fileColl struct {
 	Docs      []Document  `json:"docs"`
 }
 
-// loadFileData rebuilds collections into the entries model (resident docs).
-// Validating load: non-string _id ⇒ ErrNoID; unique conflict ⇒ ErrDuplicate.
+// loadFileData reconstruye las colecciones en el modelo de entradas (documentos residentes).
+// Carga con validación: _id no string ⇒ ErrNoID; conflicto de único ⇒ ErrDuplicate.
 func (s *Store) loadFileData(fd *fileData) error {
 	s.schemaVersion = fd.Meta.SchemaVersion
 	s.collections = map[string]*collection{}
 	for name, fc := range fd.Collections {
 		c := &collection{
-			entries:  map[string]*docEntry{},
+			entries:   map[string]*docEntry{},
 			sensitive: append([]string{}, fc.Sensitive...),
 		}
 		for _, info := range fc.Indexes {
@@ -300,14 +300,14 @@ func (s *Store) loadFileData(fd *fileData) error {
 	return nil
 }
 
-// markEntryResident accounts a resident payload in the cache registry.
+// markEntryResident contabiliza una carga residente en el registro de caché.
 func (s *Store) markEntryResident(e *docEntry) {
 	if e.docP.Load() == nil {
 		return
 	}
-	// rough size: pointer payload unknown until measured — use 0 and let
-	// loadEntry/cacheAdmit set real sizes for cold loads. For eager loads
-	// size stays 0 (no eviction pressure from migration path).
+	// tamaño aproximado: la carga por puntero no se conoce hasta medirla — se usa 0
+	// y se deja que loadEntry/cacheAdmit fije los tamaños reales en las cargas frías.
+	// En cargas "eager" el tamaño se queda en 0 (sin presión de expulsión desde la migración).
 	s.cacheAdmit(e)
 }
 
@@ -333,7 +333,7 @@ func decompressIfNeeded(flags uint16, data []byte) ([]byte, error) {
 	return zlibDecompress(data)
 }
 
-// atomicReplace writes data to path via tmp + rename (DESIGN §5.4).
+// atomicReplace escribe los datos en path mediante tmp + rename (DESIGN §5.4).
 func atomicReplace(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp*")
@@ -355,7 +355,7 @@ func atomicReplace(path string, data []byte) error {
 		os.Remove(tmpName)
 		return err
 	}
-	// Windows: rename over existing can fail; remove dest first as fallback.
+	// Windows: el rename sobre un archivo existente puede fallar; como respaldo se borra el destino antes.
 	if err := os.Rename(tmpName, path); err != nil {
 		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
 			os.Remove(tmpName)
@@ -377,8 +377,8 @@ func randomBytes(n int) ([]byte, error) {
 	return b, nil
 }
 
-// authHeader verifies the header and unwraps the DEK (v1 and v2).
-// Returns kek, dek, effective machine, kdf params — or ErrCorrupt.
+// authHeader verifica la cabecera y desenvuelve la DEK (v1 y v2).
+// Devuelve kek, dek, máquina efectiva y parámetros KDF — o ErrCorrupt.
 func authHeader(data []byte, opts Options, machine []byte) (*header, []byte, []byte, []byte, uint32, uint32, uint32, error) {
 	if len(data) < headerSize {
 		return nil, nil, nil, nil, 0, 0, 0, ErrCorrupt
@@ -412,9 +412,9 @@ func authHeader(data []byte, opts Options, machine []byte) (*header, []byte, []b
 	return h, kek, dek, effMachine, t, m, p, nil
 }
 
-// decryptFileBytes authenticates and decrypts v1 file bytes into fileData.
-// Returns header material, DEK, effective machine id (legacy retry), KDF params.
-// Any HMAC / unwrap / GCM / JSON failure ⇒ ErrCorrupt (unrecoverable).
+// decryptFileBytes autentica y descifra los bytes de un archivo v1 en fileData.
+// Devuelve el material de cabecera, la DEK, el id de máquina efectivo (reintento heredado) y los parámetros KDF.
+// Cualquier fallo de HMAC / desenvolvimiento / GCM / JSON ⇒ ErrCorrupt (irrecuperable).
 func decryptFileBytes(data []byte, opts Options, machine []byte) (*header, []byte, []byte, uint32, uint32, uint32, *fileData, error) {
 	h, _, dek, effMachine, t, m, p, err := authHeader(data, opts, machine)
 	if err != nil {
@@ -442,7 +442,7 @@ func decryptFileBytes(data []byte, opts Options, machine []byte) (*header, []byt
 	return h, dek, effMachine, t, m, p, &fd, nil
 }
 
-// Open loads an encrypted .mlstore file, or creates a new one if path does not exist.
+// Open carga un archivo .mlstore cifrado, o crea uno nuevo si la ruta no existe.
 func Open(path string, opts Options) (*Store, error) {
 	if len(opts.MasterKey) == 0 {
 		return nil, errors.New("db: Options.MasterKey is required")
@@ -454,7 +454,7 @@ func Open(path string, opts Options) (*Store, error) {
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		// fresh file
+		// archivo nuevo
 		s.dek, err = randomBytes(32)
 		if err != nil {
 			return nil, err
@@ -496,7 +496,7 @@ func Open(path string, opts Options) (*Store, error) {
 		return s, nil
 	}
 
-	// v2 record log
+	// log de registros v2
 	_, _, dek, effMachine, _, _, _, err := authHeader(data, opts, s.machine)
 	if err != nil {
 		return nil, err
@@ -509,9 +509,9 @@ func Open(path string, opts Options) (*Store, error) {
 	return s, nil
 }
 
-// Flush serializes, encrypts and writes the record log (no-op if clean).
-// Snapshot runs under RLock; compression, crypto and disk I/O run outside
-// s.mu so concurrent Find/Get/Insert are not blocked for the full write.
+// Flush serializa, cifra y escribe el log de registros (no hace nada si está limpio).
+// La instantánea se toma bajo RLock; la compresión, la criptografía y la E/S de disco
+// se ejecutan fuera de s.mu para no bloquear durante toda la escritura a Find/Get/Insert concurrentes.
 func (s *Store) Flush() error {
 	s.flushMu.Lock()
 	defer s.flushMu.Unlock()
@@ -534,17 +534,17 @@ func (s *Store) Flush() error {
 	return nil
 }
 
-// applyFlushed updates store bookkeeping after a successful write of st.
+// applyFlushed actualiza la contabilidad del almacén tras escribir st correctamente.
 func (s *Store) applyFlushed(st *flushState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.flushInProgress = false
 	s.sawFile = true
-	// M3: mutations included in this snapshot are now durable.
+	// M3: las mutaciones incluidas en esta instantánea ya son duraderas.
 	if st.writeSeq > s.durableSeq {
 		s.durableSeq = st.writeSeq
 	}
-	// Clear entry dirty flags / install new offsets from the snapshot.
+	// Limpiar los flags dirty de las entradas / instalar los nuevos offsets de la instantánea.
 	for _, fr := range st.flushedEntries {
 		c, ok := s.collections[fr.coll]
 		if !ok {
@@ -556,7 +556,7 @@ func (s *Store) applyFlushed(st *flushState) {
 		}
 		e.markEntryClean(st.gen)
 	}
-	// Full rewrite: install fresh record offsets.
+	// Reescritura completa: instalar offsets de registro nuevos.
 	if st.full {
 		for i := range st.ops {
 			op := &st.ops[i]
@@ -590,7 +590,7 @@ func (s *Store) applyFlushed(st *flushState) {
 			}
 		}
 	}
-	// Drop committed deletes.
+	// Descartar los borrados ya confirmados.
 	if st.full {
 		s.pendingDels = nil
 	} else if len(st.dels) > 0 {
@@ -600,7 +600,7 @@ func (s *Store) applyFlushed(st *flushState) {
 				kept = append(kept, d)
 			}
 		}
-		// copy to fresh slice to release old backing array
+		// copiar a un slice nuevo para liberar el array de respaldo antiguo
 		s.pendingDels = append([]delItem(nil), kept...)
 	}
 	if s.dirtyGen == st.gen {
@@ -611,9 +611,9 @@ func (s *Store) applyFlushed(st *flushState) {
 	}
 }
 
-// syncPath fsyncs path (and best-effort its directory) so a durable Flush
-// survives power loss after rename. Directory sync is best-effort (Windows
-// often rejects Sync on directories).
+// syncPath hace fsync de path (y, con mejor esfuerzo, de su directorio) para que
+// un Flush duradero sobreviva a un corte de corriente tras el rename. La sincronización
+// del directorio es "best-effort" (Windows suele rechazar Sync sobre directorios).
 func syncPath(path string) error {
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
@@ -636,9 +636,9 @@ func syncPath(path string) error {
 	return closeErr
 }
 
-// FlushSync is Flush + fsync of the final file (and best-effort dir).
-// Use after critical writes (tokens, settings) when durability before return
-// matters more than latency. No-op fsync if the store has no path.
+// FlushSync es Flush + fsync del archivo final (y del directorio, con mejor esfuerzo).
+// Úsalo tras escrituras críticas (tokens, ajustes) cuando importe más la durabilidad
+// antes de retornar que la latencia. El fsync no hace nada si el almacén no tiene path.
 func (s *Store) FlushSync() error {
 	if err := s.Flush(); err != nil {
 		return err
@@ -653,8 +653,8 @@ func (s *Store) FlushSync() error {
 	return syncPath(path)
 }
 
-// afterMutation optionally FlushSyncs when Options.SyncOnWrite is set.
-// Must not be called while holding s.mu (Flush takes flushMu → prepareFlush → mu).
+// afterMutation hace FlushSync opcionalmente cuando Options.SyncOnWrite está activo.
+// No debe llamarse con s.mu tomado (Flush toma flushMu → prepareFlush → mu).
 func (s *Store) afterMutation() error {
 	if !s.opts.SyncOnWrite || s.path == "" {
 		return nil
@@ -662,14 +662,14 @@ func (s *Store) afterMutation() error {
 	return s.FlushSync()
 }
 
-// Close stops auto-flush, flushes (if dirty), releases lock, marks closed.
+// Close detiene el auto-flush, hace flush (si está sucio), libera el bloqueo y marca cerrado.
 func (s *Store) Close() error {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return nil
 	}
-	// stop ticker first (it takes s.mu)
+	// detener primero el ticker (toma s.mu)
 	s.mu.Unlock()
 	s.stopAutoFlush()
 	s.stopHookWorker()
@@ -694,8 +694,8 @@ func (s *Store) Close() error {
 	return err
 }
 
-// markDirty should be called after every successful mutation when path-backed.
-// Caller must hold s.mu (write lock).
+// markDirty debe llamarse tras cada mutación correcta cuando hay respaldo en archivo.
+// El llamador debe tener s.mu (bloqueo de escritura).
 func (s *Store) markDirty() {
 	if s.path != "" {
 		s.dirty = true
@@ -704,8 +704,8 @@ func (s *Store) markDirty() {
 	}
 }
 
-// markEntryMutated bumps dirtyGen and flags the entry for the next flush.
-// Caller must hold s.mu.
+// markEntryMutated incrementa dirtyGen y marca la entrada para el próximo flush.
+// El llamador debe tener s.mu.
 func (s *Store) markEntryMutated(e *docEntry) {
 	s.markDirty()
 	if e != nil {

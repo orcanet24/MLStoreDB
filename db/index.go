@@ -11,34 +11,35 @@ import (
 	"sync"
 )
 
-// IndexInfo describes one index on a collection (for ListIndexes / persistence).
+// IndexInfo describe un índice sobre una colección (para ListIndexes / persistencia).
 type IndexInfo struct {
 	Fields []string `json:"fields"`
 	Unique bool     `json:"unique"`
 }
 
-// ordEntry is one distinct index key in sorted order: raw first-field value
-// (for compareOrdered) plus the full encoded key (tiebreak / hash link).
+// ordEntry es una clave de índice distinta en orden ascendente: el valor crudo
+// del primer campo (para compareOrdered) más la clave codificada completa (desempate / enlace al hash).
 type ordEntry struct {
 	val any
 	key string
 }
 
-// index is an in-memory index over one collection: hash for equality
-// plus a lazily-sorted ord slice for range/prefix seeks and sort-by-index.
-// Non-unique: key → set of _id. Unique: key → single _id.
-// mu guards entries/unique/ord (ensureOrd mutates; Find may hold s.mu.RLock).
+// index es un índice en memoria sobre una sola colección: un hash para igualdad
+// más un slice "ord" ordenado de forma perezosa para búsquedas por rango/prefijo
+// y para ordenar por índice.
+// No único: clave → conjunto de _id. Único: clave → un único _id.
+// mu protege entries/unique/ord (ensureOrd muta; Find puede tener s.mu.RLock).
 type index struct {
 	mu       sync.Mutex
 	Fields   []string
 	Unique   bool
-	entries  map[string]map[string]struct{} // key → ids (non-unique)
-	unique   map[string]string              // key → id (unique)
-	ord      []ordEntry                     // distinct keys ordered by (first-field val, key)
-	ordDirty bool                           // needs re-sort before binary search
-	// matrix is the flat CSR view of (ord × ids), non-nil only while it is
-	// known to match entries/unique/ord (set on loadRows from a valid CSR,
-	// cleared on every mutation). Used to avoid per-key map lookups + sort.
+	entries  map[string]map[string]struct{} // clave → ids (no único)
+	unique   map[string]string              // clave → id (único)
+	ord      []ordEntry                     // claves distintas ordenadas por (valor del primer campo, clave)
+	ordDirty bool                           // requiere reordenar antes de la búsqueda binaria
+	// matrix es la vista CSR plana de (ord × ids); solo deja de ser nil mientras se
+	// sabe que coincide con entries/unique/ord (se fija en loadRows a partir de un CSR
+	// válido y se limpia en cada mutación). Evita "map lookups" por clave + ordenación.
 	matrix *csrMatrix
 }
 
@@ -46,7 +47,7 @@ func newIndex(fields []string, unique bool) *index {
 	idx := &index{
 		Fields:   append([]string{}, fields...),
 		Unique:   unique,
-		ordDirty: true, // bulk build: append all, sort once on first seek
+		ordDirty: true, // construcción masiva: agregar todo y ordenar una sola vez en la 1.ª búsqueda
 	}
 	if unique {
 		idx.unique = map[string]string{}
@@ -62,8 +63,8 @@ func (idx *index) info() IndexInfo {
 	return IndexInfo{Fields: append([]string{}, idx.Fields...), Unique: idx.Unique}
 }
 
-// typeRank orders types for range seeks: nil < numbers < string < bool < other.
-// Cross-type never compares equal in ranges (Mongo-like: no cross-type order).
+// typeRank ordena los tipos para las búsquedas por rango: nil < números < string < bool < otros.
+// Entre tipos distintos nunca hay igualdad en rangos (estilo Mongo: sin orden entre tipos).
 func typeRank(v any) int {
 	if v == nil {
 		return 0
@@ -80,8 +81,8 @@ func typeRank(v any) int {
 	return 4
 }
 
-// compareOrdered is a total order on index first-field values: type rank first,
-// then compareValues within numeric/string ranks (bool: false < true).
+// compareOrdered define un orden total sobre los valores del primer campo del índice:
+// primero el rango de tipo y luego compareValues dentro de los rangos numérico/string (bool: false < true).
 func compareOrdered(a, b any) int {
 	ra, rb := typeRank(a), typeRank(b)
 	if ra != rb {
@@ -104,7 +105,7 @@ func compareOrdered(a, b any) int {
 		}
 		return 1
 	case 4:
-		return 0 // other: no cross value order; key tiebreak only
+		return 0 // otros: sin orden entre valores; solo desempata la clave
 	default:
 		return compareValues(a, b)
 	}
@@ -117,7 +118,7 @@ func ordLess(a, b ordEntry) bool {
 	return a.key < b.key
 }
 
-// ensureOrd sorts ord if dirty. Caller must hold idx.mu.
+// ensureOrd ordena ord si está "sucio". El llamador debe tener tomado idx.mu.
 func (idx *index) ensureOrd() {
 	if !idx.ordDirty {
 		return
@@ -126,9 +127,9 @@ func (idx *index) ensureOrd() {
 	idx.ordDirty = false
 }
 
-// addDoc indexes all key-rows for docID. On unique conflict returns ErrDuplicate
-// and does not partially apply (caller must not have removed old entries yet,
-// or must rollback).
+// addDoc indexa todas las filas de clave del docID. Si hay conflicto de único
+// devuelve ErrDuplicate y no aplica nada de forma parcial (el llamador no debe
+// haber borrado aún las entradas viejas, o debe hacer rollback).
 func (idx *index) addDoc(doc Document, docID string) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -137,14 +138,14 @@ func (idx *index) addDoc(doc Document, docID string) error {
 
 func (idx *index) addDocLocked(doc Document, docID string) error {
 	rows := extractIndexRows(doc, idx.Fields)
-	// Stage keys first so unique conflicts abort cleanly.
+	// Se preparan las claves primero para que los conflictos de "único" aborten limpio.
 	keys := make([]string, 0, len(rows))
 	vals := make([]any, 0, len(rows))
 	seen := map[string]bool{}
 	for _, row := range rows {
 		k := encodeIndexKey(row)
 		if seen[k] {
-			continue // same key twice in one doc (duplicate array elems)
+			continue // misma clave dos veces en un documento (elementos repetidos de un array)
 		}
 		seen[k] = true
 		if idx.Unique {
@@ -165,7 +166,7 @@ func (idx *index) addDocLocked(doc Document, docID string) error {
 	return nil
 }
 
-// addKey assumes idx.mu held.
+// addKey asume que idx.mu ya está tomado.
 func (idx *index) addKey(k string, val any, docID string) {
 	idx.matrix = nil
 	if idx.Unique {
@@ -185,8 +186,8 @@ func (idx *index) addKey(k string, val any, docID string) {
 }
 
 func (idx *index) ordAdd(e ordEntry) {
-	// Bulk path (dirty): append and sort lazily on next seek.
-	// Steady path (clean): binary-insert to keep ord sorted without a full sort.
+	// Camino masivo (sucio): agregar y ordenar de forma perezosa en la próxima búsqueda.
+	// Camino estable (limpio): insertar con búsqueda binaria para mantener ord ordenado sin ordenar todo.
 	if idx.ordDirty {
 		idx.ord = append(idx.ord, e)
 		return
@@ -199,7 +200,7 @@ func (idx *index) ordAdd(e ordEntry) {
 	idx.ord[i] = e
 }
 
-// removeDoc drops all index entries for docID using the given document values.
+// removeDoc elimina todas las entradas de índice del docID usando los valores del documento dado.
 func (idx *index) removeDoc(doc Document, docID string) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -237,7 +238,7 @@ func (idx *index) removeKey(k string, val any, docID string) {
 
 func (idx *index) ordRemove(e ordEntry) {
 	if idx.ordDirty {
-		// Unsorted: linear scan (avoid forcing a sort mid-batch).
+		// Sin ordenar: recorrido lineal (evita forzar una ordenación a mitad de lote).
 		for j := range idx.ord {
 			if idx.ord[j].key == e.key {
 				idx.ord = append(idx.ord[:j], idx.ord[j+1:]...)
@@ -253,7 +254,7 @@ func (idx *index) ordRemove(e ordEntry) {
 		idx.ord = append(idx.ord[:i], idx.ord[i+1:]...)
 		return
 	}
-	// val mismatch fallback (should not happen): linear scan by key
+	// Respaldo por desajuste de valor (no debería ocurrir): recorrido lineal por clave
 	for j := range idx.ord {
 		if idx.ord[j].key == e.key {
 			idx.ord = append(idx.ord[:j], idx.ord[j+1:]...)
@@ -262,8 +263,8 @@ func (idx *index) ordRemove(e ordEntry) {
 	}
 }
 
-// lookupIDs returns _id set for equality values on the index (full key when
-// len(values)==len(Fields); partial not used in MVP planner).
+// lookupIDs devuelve el conjunto de _id para valores de igualdad en el índice
+// (clave completa cuando len(values)==len(Fields); el planificador MVP no usa coincidencias parciales).
 func (idx *index) lookupIDs(values []any) map[string]struct{} {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -282,7 +283,7 @@ func (idx *index) lookupIDs(values []any) map[string]struct{} {
 	return out
 }
 
-// countKey returns how many docs match the full key without building an ID set.
+// countKey devuelve cuántos documentos coinciden con la clave completa sin construir un conjunto de IDs.
 func (idx *index) countKey(values []any) int {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -296,8 +297,8 @@ func (idx *index) countKey(values []any) int {
 	return len(idx.entries[k])
 }
 
-// covers reports whether every index row for doc/docID is present.
-// Used at flush time to set the suspect flag when index state is stale.
+// covers indica si están presentes todas las filas de índice de doc/docID.
+// Se usa al hacer flush para marcar el flag "sospechoso" cuando el estado del índice está obsoleto.
 func (idx *index) covers(doc Document, docID string) bool {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -317,9 +318,9 @@ func (idx *index) covers(doc Document, docID string) bool {
 	return true
 }
 
-// seekPrefix returns docs whose encoded key starts with the prefix of
-// values (values must be a leading subset of Fields). Full-length values
-// are an exact key seek; partial seeks narrow via ord on the first field.
+// seekPrefix devuelve los documentos cuya clave codificada empieza por el prefijo
+// de values (values debe ser un subconjunto inicial de Fields). Con la longitud
+// completa es una búsqueda exacta por clave; las parciales se acotan usando ord sobre el primer campo.
 func (idx *index) seekPrefix(values []any) map[string]struct{} {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -334,7 +335,7 @@ func (idx *index) seekPrefix(values []any) map[string]struct{} {
 	target := values[0]
 	rank := typeRank(target)
 	if rank == 0 || rank == 3 || rank == 4 {
-		// unordered band: full scan of distinct keys
+		// banda sin orden: recorrido completo de las claves distintas
 		idx.collectPrefixScan(prefix, out)
 		return out
 	}
@@ -407,7 +408,7 @@ func (idx *index) collectPrefixScan(prefix string, out map[string]struct{}) {
 	}
 }
 
-// rangeBound describes a pure $gt/$gte/$lt/$lte conjunction on one field.
+// rangeBound describe una conjunción pura de $gt/$gte/$lt/$lte sobre un único campo.
 type rangeBound struct {
 	lo, hi       any
 	hasLo, hasHi bool
@@ -415,18 +416,18 @@ type rangeBound struct {
 	hiIncl       bool
 }
 
-// seekRange returns docs where the first index field value is in [lo,hi]
-// (same type-rank band only). IDs are in ascending ord order.
+// seekRange devuelve los documentos cuyo primer campo del índice está en [lo,hi]
+// (solo dentro de la misma banda de rango de tipo). Los IDs van en orden ascendente de ord.
 func (idx *index) seekRange(rb rangeBound) []string {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	idx.ensureOrd()
-	// Determine target type rank from bounds.
+	// Se determina el rango de tipo objetivo a partir de los límites.
 	rank := -1
 	if rb.hasLo && rb.hasHi {
 		ra, rh := typeRank(rb.lo), typeRank(rb.hi)
 		if ra != rh {
-			return nil // no value can be in both bands
+			return nil // ningún valor puede estar en ambas bandas
 		}
 		rank = ra
 	} else if rb.hasLo {
@@ -437,11 +438,11 @@ func (idx *index) seekRange(rb rangeBound) []string {
 		return nil
 	}
 	if rank == 0 || rank == 3 || rank == 4 {
-		// nil / bool / other are not ordered by compareOp (comparableTypes false)
+		// nil / bool / otros no se ordenan con compareOp (comparableTypes es false)
 		return nil
 	}
 
-	// Binary search lower edge within [rank] band.
+	// Búsqueda binaria del borde inferior dentro de la banda [rank].
 	start := sort.Search(len(idx.ord), func(i int) bool {
 		e := idx.ord[i]
 		r := typeRank(e.val)
@@ -464,7 +465,7 @@ func (idx *index) seekRange(rb rangeBound) []string {
 			return r > rank
 		}
 		if !rb.hasHi {
-			return false // still in band; end advances past band below
+			return false // aún dentro de la banda; "end" avanza más allá abajo
 		}
 		c := compareOrdered(e.val, rb.hi)
 		if rb.hiIncl {
@@ -472,13 +473,13 @@ func (idx *index) seekRange(rb rangeBound) []string {
 		}
 		return c >= 0
 	})
-	// When only lo bound: end must stop at end of rank band.
+	// Con solo límite lo: "end" debe parar al final de la banda de rango.
 	if !rb.hasHi {
 		end = sort.Search(len(idx.ord), func(i int) bool {
 			return typeRank(idx.ord[i].val) > rank
 		})
 	}
-	// When only hi bound: start must start at beginning of rank band.
+	// Con solo límite hi: "start" debe empezar al inicio de la banda de rango.
 	if !rb.hasLo {
 		start = sort.Search(len(idx.ord), func(i int) bool {
 			r := typeRank(idx.ord[i].val)
@@ -488,9 +489,9 @@ func (idx *index) seekRange(rb rangeBound) []string {
 	return idx.collectRange(start, end)
 }
 
-// collectRange gathers ids for ord rows [start,end), preferring the flat CSR
-// matrix when it is in sync (M2), else the per-key map path.
-// Caller holds idx.mu (and ord must already be sorted if using matrix).
+// collectRange recoge los ids de las filas de ord [start,end), prefiriendo la matrix
+// CSR plana cuando está sincronizada (M2) y, si no, el camino por mapas de clave.
+// El llamador tiene idx.mu (y ord ya debe estar ordenado si se usa la matrix).
 func (idx *index) collectRange(start, end int) []string {
 	if m := idx.matrix; m != nil && !idx.ordDirty && len(m.Indptr) == len(idx.ord)+1 {
 		var out []string
@@ -516,7 +517,7 @@ func (idx *index) collectRange(start, end int) []string {
 	return out
 }
 
-// idsSortedForKey returns doc ids for one key in ascending order (deterministic).
+// idsSortedForKey devuelve los ids de documento de una clave en orden ascendente (determinista).
 func (idx *index) idsSortedForKey(k string) []string {
 	set := idx.entries[k]
 	if len(set) == 0 {
@@ -530,7 +531,7 @@ func (idx *index) idsSortedForKey(k string) []string {
 	return out
 }
 
-// orderedIDs walks the whole index in (val, _id) order — sort by index.
+// orderedIDs recorre todo el índice en orden (valor, _id) — ordenar por índice.
 func (idx *index) orderedIDs() []string {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -555,36 +556,36 @@ func (idx *index) orderedIDs() []string {
 	return out
 }
 
-// idxRow is one persisted index key row (M1: full serialize per flush).
+// idxRow es una fila de clave de índice persistida (M1: serialización completa en cada flush).
 type idxRow struct {
 	K   string   `json:"k"`
 	V   any      `json:"v,omitempty"`
 	IDs []string `json:"ids"`
 }
 
-// csrMatrix is the M2 flat CSR view of an index: row i ↔ ord[i],
-// Indices[Indptr[i]:Indptr[i+1]] are column ordinals into Ids (docID dict).
-// Checksum is CRC32-C over keys|indptr|indices|ids for load-time validation.
+// csrMatrix es la vista CSR plana (M2) de un índice: la fila i ↔ ord[i],
+// Indices[Indptr[i]:Indptr[i+1]] son ordinales de columna dentro de Ids (diccionario de docID).
+// Checksum es CRC32-C sobre keys|indptr|indices|ids para validar al cargar.
 type csrMatrix struct {
-	Keys     []string `json:"keys"`   // distinct keys, ord order (row labels)
-	Vals     []any    `json:"vals"`   // first-field values (row data for ranges)
+	Keys     []string `json:"keys"`   // claves distintas en orden de ord (etiquetas de fila)
+	Vals     []any    `json:"vals"`   // valores del primer campo (datos de fila para rangos)
 	Indptr   []int32  `json:"indptr"` // len = len(Keys)+1
 	Indices  []int32  `json:"indices"`
-	Ids      []string `json:"ids"` // column dictionary: docID
+	Ids      []string `json:"ids"` // diccionario de columnas: docID
 	Checksum uint32   `json:"csum"`
 }
 
-// idxPayload is the plaintext of an IDX record.
+// idxPayload es el texto plano de un registro IDX.
 type idxPayload struct {
 	Coll   string     `json:"c"`
 	Fields []string   `json:"f"`
 	Unique bool       `json:"u"`
 	Rows   []idxRow   `json:"rows"`
-	CSR    *csrMatrix `json:"csr,omitempty"` // M2: primary load path
+	CSR    *csrMatrix `json:"csr,omitempty"` // M2: camino de carga principal
 }
 
-// serialize snapshots index rows in ord order for persistence, and embeds
-// the CSR matrix (M2). Rows remain as a fallback when the CSR checksum fails.
+// serialize toma una instantánea de las filas del índice en orden de ord para
+// persistirlas y embebe la matrix CSR (M2). Rows queda como respaldo si falla el checksum del CSR.
 func (idx *index) serialize() idxPayload {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -635,14 +636,14 @@ func (idx *index) serialize() idxPayload {
 		m.Indptr = append(m.Indptr, int32(len(m.Indices)))
 	}
 	m.Checksum = m.computeChecksum()
-	// Built 1:1 from the ord walk — safe as the live flat view until the
-	// next mutation (addKey/removeKey clear idx.matrix).
+	// Construida 1:1 desde el recorrido de ord — sirve como vista plana viva hasta la
+	// siguiente mutación (addKey/removeKey limpian idx.matrix).
 	idx.matrix = m
 	p.CSR = m
 	return p
 }
 
-// computeChecksum is CRC32-C over the structural fields of the matrix.
+// computeChecksum es CRC32-C sobre los campos estructurales de la matrix.
 func (m *csrMatrix) computeChecksum() uint32 {
 	h := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 	for _, k := range m.Keys {
@@ -667,7 +668,7 @@ func (m *csrMatrix) computeChecksum() uint32 {
 	return h.Sum32()
 }
 
-// valid reports structural sanity + checksum match.
+// valid comprueba la coherencia estructural y que el checksum coincida.
 func (m *csrMatrix) valid() bool {
 	if m == nil || len(m.Indptr) == 0 {
 		return false
@@ -695,9 +696,9 @@ func (m *csrMatrix) valid() bool {
 	return m.Checksum == m.computeChecksum()
 }
 
-// loadRows rebuilds the in-memory index. M2: prefers the CSR matrix when its
-// checksum validates; falls back to Rows; empty/corrupt → error (eager path).
-// Unique rows with >1 id → ErrDuplicate (eager repair path handles repair).
+// loadRows reconstruye el índice en memoria. M2: prefiere la matrix CSR cuando su
+// checksum valida; si no, recurre a Rows; vacío/corrupto → error (camino "eager").
+// Filas únicas con más de 1 id → ErrDuplicate (el camino de reparación "eager" lo resuelve).
 func (idx *index) loadRows(p idxPayload) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
@@ -736,8 +737,8 @@ func (idx *index) loadRows(p idxPayload) error {
 	return nil
 }
 
-// loadCSR materializes entries/unique/ord from a validated matrix and keeps
-// idx.matrix live for flat range/sort seeks. Caller holds idx.mu.
+// loadCSR materializa entries/unique/ord desde una matrix ya validada y mantiene
+// idx.matrix viva para búsquedas planas por rango/orden. El llamador tiene idx.mu.
 func (idx *index) loadCSR(m *csrMatrix) error {
 	idx.entries = map[string]map[string]struct{}{}
 	idx.unique = map[string]string{}
@@ -769,15 +770,15 @@ func (idx *index) loadCSR(m *csrMatrix) error {
 		idx.entries[k] = set
 		idx.ord = append(idx.ord, ordEntry{val: m.Vals[i], key: k})
 	}
-	// Keep the matrix as the flat view — ord rows align 1:1 with m.Keys
-	// only if no empty keys were skipped. Rebuild indptr alignment by
-	// storing a matrix whose Keys match the kept ord (drop empty unique gaps).
+	// Se conserva la matrix como vista plana — las filas de ord se alinean 1:1 con
+	// m.Keys solo si no se saltaron claves vacías. Se reajusta indptr guardando una
+	// matrix cuyas Keys coincidan con el ord conservado (descartando huecos únicos vacíos).
 	idx.matrix = m.alignToOrd(idx.ord)
 	return nil
 }
 
-// alignToOrd returns a matrix whose row count matches ord (drops keys that
-// loadCSR skipped: empty unique rows / empty non-unique sets).
+// alignToOrd devuelve una matrix cuyo número de filas coincide con ord (descarta
+// las claves que loadCSR saltó: filas únicas vacías / conjuntos no únicos vacíos).
 func (m *csrMatrix) alignToOrd(ord []ordEntry) *csrMatrix {
 	if len(ord) == len(m.Keys) {
 		return m
@@ -807,11 +808,11 @@ func (m *csrMatrix) alignToOrd(ord []ordEntry) *csrMatrix {
 	return out
 }
 
-// errIdxMismatch signals META index def vs IDX payload disagreement (eager fallback).
+// errIdxMismatch indica que la definición del índice en META y la carga IDX no coinciden (respaldo "eager").
 var errIdxMismatch = fmt.Errorf("db: index definition mismatch")
 
-// extractIndexRows builds one []any row per index-key combination.
-// Top-level arrays expand (each element indexes); missing/null → nil sentinel.
+// extractIndexRows construye una fila []any por cada combinación de claves del índice.
+// Los arrays de primer nivel se expanden (se indexa cada elemento); ausente/null → centinela nil.
 func extractIndexRows(doc Document, fields []string) [][]any {
 	rows := [][]any{{}}
 	for _, f := range fields {
@@ -822,7 +823,7 @@ func extractIndexRows(doc Document, fields []string) [][]any {
 		next := make([][]any, 0, len(rows))
 		if arr, ok := v.([]any); ok {
 			if len(arr) == 0 {
-				// empty array indexes as nil (Mongo-ish: no elements)
+				// un array vacío se indexa como nil (estilo Mongo: no hay elementos)
 				for _, row := range rows {
 					nr := append(append([]any{}, row...), nil)
 					next = append(next, nr)
@@ -846,7 +847,7 @@ func extractIndexRows(doc Document, fields []string) [][]any {
 	return rows
 }
 
-// encodeIndexKey joins field values with \x1f (DESIGN §4.3 compound key).
+// encodeIndexKey une los valores de campo con \x1f (clave compuesta, DESIGN §4.3).
 func encodeIndexKey(values []any) string {
 	parts := make([]string, len(values))
 	for i, v := range values {
@@ -857,7 +858,7 @@ func encodeIndexKey(values []any) string {
 
 func encodeIndexValue(v any) string {
 	if v == nil {
-		return "u:" // missing/null sentinel
+		return "u:" // centinela de ausente/null
 	}
 	switch t := v.(type) {
 	case string:
@@ -885,7 +886,7 @@ func encodeIndexValue(v any) string {
 	}
 }
 
-// sameFields reports whether two field lists are identical (order-sensitive).
+// sameFields indica si dos listas de campos son idénticas (sensible al orden).
 func sameFields(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

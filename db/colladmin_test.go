@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// M8 wire support: UpdateFields, CreateCollection, DropCollection (+Session
-// admin variants) and the META-gated scan that prevents dropped collections
-// from resurrecting from stale DOC/IDX records.
+// Soporte del wire M8: UpdateFields, CreateCollection, DropCollection (más las variantes
+// de administración de Session) y el escaneo condicionado por META que evita que las
+// colecciones eliminadas resuciten a partir de registros DOC/IDX obsoletos.
 
 func TestUpdateFieldsPatchAndRemove(t *testing.T) {
 	s := New()

@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-// M3: parallel Find equivalence, Find∥Insert∥Flush, write backpressure.
+// M3: equivalencia de Find en paralelo, Find‖Insert‖Flush y contrapresión de escritura.
 
 func TestParallelFindMatchesSerial(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "db.mlstore")
 	opts := testOpts()
-	opts.FindWorkers = -1 // serial baseline
+	opts.FindWorkers = -1 // línea base en serie
 	s, err := Open(path, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +56,7 @@ func TestParallelFindMatchesSerial(t *testing.T) {
 		serial = append(serial, docIDs(docs))
 	}
 
-	// Same store, now force many workers.
+	// El mismo almacén, ahora forzando muchos workers.
 	s.opts.FindWorkers = 32
 	for i, f := range filters {
 		docs, err := s.Find("q", f, nil)
@@ -73,7 +73,7 @@ func TestParallelFindMatchesSerial(t *testing.T) {
 			}
 		}
 	}
-	// Count equivalence.
+	// Equivalencia de Count.
 	s.opts.FindWorkers = -1
 	nSerial, err := s.Count("q", Document{"status": "CLOSED"})
 	if err != nil {
@@ -108,7 +108,7 @@ func TestParallelFindDuringFlushNoError(t *testing.T) {
 	stop := make(chan struct{})
 	flushDone := make(chan struct{})
 	errCh := make(chan error, 16)
-	// Flush loop (separate lifecycle — stop closes after writers finish).
+	// Bucle de Flush (ciclo de vida aparte — se detiene tras terminar los escritores).
 	go func() {
 		defer close(flushDone)
 		for {
@@ -126,7 +126,7 @@ func TestParallelFindDuringFlushNoError(t *testing.T) {
 			}
 		}
 	}()
-	// Writer + parallel reader.
+	// Escritor + lector en paralelo.
 	for g := 0; g < 4; g++ {
 		writers.Add(1)
 		go func(g int) {
@@ -161,7 +161,7 @@ func TestParallelFindDuringFlushNoError(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// Reopen: all docs present.
+	// Reapertura: están todos los documentos.
 	s2, err := Open(path, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -186,17 +186,17 @@ func TestWriteBackpressureBlocksDuringFlush(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Start a flush that is "in progress" by setting the flag manually is
-	// racy; instead: stage a flush via prepareFlush (sets flushInProgress)
-	// and write enough mutations that the next writers must wait until
-	// applyFlushed broadcasts.
-	// Simpler deterministic check: with no flush in progress, writes never block.
+	// Marcar el flag "en curso" a mano es una carrera; en su lugar: preparar un flush
+	// con prepareFlush (fija flushInProgress) y escribir suficientes mutaciones para que
+	// los siguientes escritores deban esperar hasta que applyFlushed haga broadcast.
+	// Comprobación determinista más simple: sin ningún flush en curso, las escrituras
+	// nunca se bloquean.
 	for i := 0; i < 20; i++ {
 		if err := s.Insert("q", Document{"_id": idKey(i)}); err != nil {
 			t.Fatalf("write without flush must not block: %v", err)
 		}
 	}
-	// Now interleave prepareFlush (holds flushInProgress) with writers.
+	// Ahora intercalar prepareFlush (mantiene flushInProgress) con los escritores.
 	st, err := s.prepareFlush(path, true)
 	if err != nil {
 		t.Fatal(err)
@@ -211,8 +211,8 @@ func TestWriteBackpressureBlocksDuringFlush(t *testing.T) {
 	if !inProg {
 		t.Fatal("prepareFlush must set flushInProgress")
 	}
-	// Writers that exceed MaxPendingWrites while flush is open must wait.
-	// Run them async; complete the flush; they must all finish.
+	// Los escritores que superan MaxPendingWrites mientras el flush está abierto deben
+	// esperar. Se lanzan en asíncrono; se completa el flush; todos deben acabar.
 	var wg sync.WaitGroup
 	errCh := make(chan error, 32)
 	for g := 0; g < 8; g++ {
@@ -230,13 +230,13 @@ func TestWriteBackpressureBlocksDuringFlush(t *testing.T) {
 			}
 		}(g)
 	}
-	// Give writers a moment to pile up against the open flush, then commit.
+	// Dar un momento a los escritores para que se acumulen contra el flush abierto y luego confirmar.
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	// Finish the flush.
+	// Terminar el flush.
 	if err := writeState(st); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestUpdateCOWFailureLeavesLiveDoc(t *testing.T) {
 	if err := s.Insert("q", Document{"_id": "1", "n": 1, "keep": "yes"}); err != nil {
 		t.Fatal(err)
 	}
-	// Oversized patch fails checkDocSize → live doc unchanged (COW).
+	// Un patch demasiado grande falla en checkDocSize → el documento vivo no cambia (COW).
 	huge := strings.Repeat("x", maxDocBytes+1)
 	if err := s.Update("q", "1", Document{"blob": huge}); err == nil {
 		t.Fatal("expected size error")
@@ -290,7 +290,7 @@ func TestUpdateCOWFailureLeavesLiveDoc(t *testing.T) {
 	default:
 		t.Fatalf("live doc n type %T = %v, want 1", doc["n"], doc["n"])
 	}
-	// Successful COW update installs next.
+	// Una actualización COW correcta instala el siguiente.
 	if err := s.Update("q", "1", Document{"n": 2}); err != nil {
 		t.Fatal(err)
 	}

@@ -32,7 +32,7 @@ func TestFlushSyncPersistsImmediately(t *testing.T) {
 	if dirty {
 		t.Fatal("expected clean after FlushSync")
 	}
-	// File must already contain the doc without Close/auto-flush.
+	// El archivo debe contener ya el documento sin Close ni auto-flush.
 	s2, err := Open(path, testOpts())
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +57,7 @@ func TestSyncOnWriteAutoPersists(t *testing.T) {
 	if err := s.Insert("tokens", Document{"_id": "acc1", "access_token": "tok"}); err != nil {
 		t.Fatal(err)
 	}
-	// Mutation returned ⇒ already durable (no Close/Flush/manual call).
+	// La mutación retornó ⇒ ya es duradero (sin Close/Flush ni llamada manual).
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestCorruptMainSnapshotRecovers(t *testing.T) {
 	if _, err := Open(path, testOpts()); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("corrupt main: want ErrCorrupt, got %v", err)
 	}
-	// Snapshot must still open cleanly.
+	// La Snapshot debe seguir abriéndose limpiamente.
 	s2, err := Open(bak, testOpts())
 	if err != nil {
 		t.Fatalf("snapshot open: %v", err)
@@ -133,7 +133,7 @@ func TestCorruptMainSnapshotRecovers(t *testing.T) {
 	if err != nil || d["keep"] != true {
 		t.Fatalf("snapshot content: %v %v", d, err)
 	}
-	// Repair cannot fix GCM failure.
+	// Repair no puede arreglar un fallo de GCM.
 	if _, err := Repair(path, testOpts()); !errors.Is(err, ErrCorrupt) {
 		t.Fatalf("repair corrupt payload: want ErrCorrupt, got %v", err)
 	}
@@ -167,7 +167,7 @@ func TestRepairInvalidIDType(t *testing.T) {
 	if err := s.Insert("q", Document{"_id": "good", "n": 1}); err != nil {
 		t.Fatal(err)
 	}
-	// Bypass API: non-string _id in the file.
+	// Saltarse la API: _id no string en el archivo.
 	s.mu.Lock()
 	s.collections["q"].entries["bad"] = newDocEntry(Document{"_id": float64(42), "n": 2})
 	s.markDirty()
@@ -202,7 +202,7 @@ func TestRepairInvalidIDType(t *testing.T) {
 	if len(all) != 1 {
 		t.Fatalf("docs after repair: %d", len(all))
 	}
-	// Indexes rebuilt: unique on n still works if we add one
+	// Índices reconstruidos: el único sobre n sigue funcionando si añadimos uno
 	if err := s2.EnsureIndex("q", []string{"n"}, true); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestRepairUniqueConflict(t *testing.T) {
 	if err := s.EnsureIndex("q", []string{"status"}, true); err != nil {
 		t.Fatal(err)
 	}
-	// Inject second doc with same unique key without index entry.
+	// Inyectar un segundo documento con la misma clave única sin entrada de índice.
 	s.mu.Lock()
 	s.collections["q"].entries["b"] = newDocEntry(Document{"_id": "b", "status": "dup"})
 	s.markDirty()
@@ -247,14 +247,14 @@ func TestRepairUniqueConflict(t *testing.T) {
 
 	s2 := openTest(t, path)
 	defer s2.Close()
-	// Kept lowest _id "a"
+	// Se conservó el _id más bajo, "a"
 	if _, err := s2.Get("q", "a"); err != nil {
 		t.Fatalf("kept a: %v", err)
 	}
 	if _, err := s2.Get("q", "b"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("dropped b: %v", err)
 	}
-	// Unique index works after repair
+	// El índice único funciona tras la reparación
 	if err := s2.Insert("q", Document{"_id": "c", "status": "dup"}); !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("unique enforced: %v", err)
 	}

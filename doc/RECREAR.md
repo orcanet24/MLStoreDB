@@ -239,6 +239,7 @@ Priorizadas por valor general:
 6. ~~Hooks Go + triggers JSON~~ → **hecho (M5a/M5b)**.
 7. ~~Grafo edges/Traverse/ShortestPath~~ → **hecho (M6)**.
 8. ~~**Wire protocol Mongo-compatible (OP_MSG)** — M8~~ ✅ completado: package `wire/` (BSON, OP_MSG/OP_QUERY, CRUD, aggregate, SCRAM) + `tools/mls-server` + manual `doc/manual/` (ES/EN + HTML).
+9. **Consola web de administración** — M9 completo + auditado (M9x): M9a (auth/CRUD) ✅ · M9b (import/export/índices/triggers) ✅ · M9c (canvas de grafos) ✅ · M9d (usuarios/roles/consola consultas) ✅ · M9e (docs) ✅ · M9x (auditoría docs↔código, restauración UI, bugs multi-BD) ✅ — informe: [INFORME_AUDITORIA.md](INFORME_AUDITORIA.md).
 9. **Índices textuales** — `$text` / prefix search más allá de `ord` de string.
 10. **TTL helper** — job que borra docs por `expires_at` (la app ya puede).
 11. **WAL opcional** si hay caso financiero.

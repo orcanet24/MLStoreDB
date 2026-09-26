@@ -12,7 +12,7 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// Document is a JSON object with a required string _id.
+// Document es un objeto JSON con un campo _id de tipo string obligatorio.
 type Document map[string]any
 
 type collection struct {
@@ -21,14 +21,14 @@ type collection struct {
 	sensitive []string
 }
 
-// Store is an in-memory JSON document store; optional encrypted file backing (M4).
-// Safe for concurrent use.
+// Store es un almacén de documentos JSON en memoria; opcionalmente respaldado
+// por un archivo cifrado (M4). Seguro para uso concurrente.
 type Store struct {
 	mu            sync.RWMutex
 	collections   map[string]*collection
 	schemaVersion uint64
 
-	// file backing (empty path = RAM-only)
+	// respaldo en archivo (path vacío = solo RAM)
 	path    string
 	opts    Options
 	dek     []byte
@@ -41,38 +41,38 @@ type Store struct {
 	kdfMem  uint32
 	kdfPar  uint32
 
-	// M5 runtime
+	// runtime de M5
 	lock      *flock.Flock
 	flushStop chan struct{}
 	flushDone chan struct{}
 
-	// non-blocking flush (point 3)
-	flushMu  sync.Mutex // serializes writeState (I/O) without holding mu
-	dirtyGen uint64     // bumped by markDirty; flush clears dirty only if unchanged
-	machine  []byte     // KEK machine id resolved at Open (persist across Flush)
+	// flush no bloqueante (punto 3)
+	flushMu  sync.Mutex // serializa writeState (E/S) sin tener tomado mu
+	dirtyGen uint64     // lo incrementa markDirty; el flush limpia dirty solo si no cambió
+	machine  []byte     // id de máquina para la KEK resuelto en Open (persiste entre Flush)
 
-	// M1 record log / cache
-	sawFile         bool // a durable v2 body exists (enables append + DELs)
-	v1Migration     bool // loaded v1 or suspect state → next flush is full rewrite
-	compactForce    bool // next prepareFlush is a full rewrite
-	flushInProgress bool // snapshot taken; deletes must enqueue DELs
+	// registro de log / caché de M1
+	sawFile         bool // existe un cuerpo v2 duradero (habilita append + DELs)
+	v1Migration     bool // se cargó un estado v1 o sospechoso → el próximo flush es reescritura completa
+	compactForce    bool // el próximo prepareFlush es una reescritura completa
+	flushInProgress bool // instantánea tomada; los borrados deben encolar DELs
 	pendingDels     []delItem
 	cacheMu         sync.Mutex
 	cache           map[*docEntry]struct{}
 	residentBytes   int64
 	cacheEvictions  uint64
-	noEvict         atomicBool // hold eviction (v1 migration window)
-	kek             []byte     // cached KEK (Argon2 once per credentials)
+	noEvict         atomicBool // retiene la expulsión (ventana de migración v1)
+	kek             []byte     // KEK en caché (Argon2 una vez por credenciales)
 
-	// M3 backpressure: mutations since last durable flush snapshot.
-	writeSeq   uint64 // bumped by markDirty
-	durableSeq uint64 // writeSeq included in the last successful writeState
+	// contrapresión de M3: mutaciones desde la última instantánea de flush duradera.
+	writeSeq   uint64 // lo incrementa markDirty
+	durableSeq uint64 // writeSeq incluido en el último writeState correcto
 	bpCond     *sync.Cond
 
-	// M4 RBAC: token → live Session. Guarded by mu. Empty until Authenticate.
+	// RBAC de M4: token → Session viva. Protegido por mu. Vacío hasta Authenticate.
 	sessions map[string]*Session
 
-	// M5a hooks: registrations + bounded async FIFO worker.
+	// hooks de M5a: registros + worker FIFO asíncrono acotado.
 	hooksMu  sync.Mutex
 	hooks    []*hookReg
 	hookSeq  uint64
@@ -80,22 +80,22 @@ type Store struct {
 	hookStop chan struct{}
 	hookDone chan struct{}
 
-	// M5b declarative triggers: _triggers → M5a hook registration.
+	// triggers declarativos de M5b: _triggers → registro de hook de M5a.
 	trigMu         sync.Mutex
 	triggersLoaded bool
-	triggerHooks   map[string]uint64 // trigger _id → M5a hook id
+	triggerHooks   map[string]uint64 // _id del trigger → id de hook de M5a
 
-	// M6 graph: CSR adjacency snapshots for edges.* collections.
+	// grafo de M6: instantáneas de adyacencia CSR para las colecciones edges.*.
 	graphFields
 }
 
-// atomicBool wraps atomic.Bool for the eviction hold flag.
+// atomicBool envuelve atomic.Bool para el flag de retención de expulsión.
 type atomicBool struct{ v atomic.Bool }
 
-func (b *atomicBool) Load() bool     { return b.v.Load() }
-func (b *atomicBool) Store(x bool)   { b.v.Store(x) }
+func (b *atomicBool) Load() bool   { return b.v.Load() }
+func (b *atomicBool) Store(x bool) { b.v.Store(x) }
 
-// New creates an empty in-memory store (schemaVersion 0 = needs migrations).
+// New crea un almacén en memoria vacío (schemaVersion 0 = necesita migraciones).
 func New() *Store {
 	s := &Store{
 		collections: map[string]*collection{},
@@ -114,9 +114,9 @@ func (s *Store) coll(name string) *collection {
 	return c
 }
 
-// EnsureIndex creates (or no-ops if identical) an index on coll.
-// fields is 1..N (compound). unique enforces one doc per key combination.
-// On non-empty coll, builds from existing docs; unique conflicts → ErrDuplicate.
+// EnsureIndex crea (o no hace nada si ya es idéntico) un índice sobre coll.
+// fields es 1..N (compuesto). unique impone un documento por combinación de claves.
+// En una colección no vacía se construye desde los documentos existentes; los conflictos de único → ErrDuplicate.
 func (s *Store) EnsureIndex(coll string, fields []string, unique bool) error {
 	if err := s.ensureIndex(coll, fields, unique); err != nil {
 		return err
@@ -159,7 +159,7 @@ func (s *Store) ensureIndex(coll string, fields []string, unique bool) error {
 	return nil
 }
 
-// DropIndex removes the index matching fields (order-sensitive).
+// DropIndex elimina el índice que coincide con fields (sensible al orden).
 func (s *Store) DropIndex(coll string, fields []string) error {
 	if err := s.dropIndex(coll, fields); err != nil {
 		return err
@@ -184,7 +184,7 @@ func (s *Store) dropIndex(coll string, fields []string) error {
 	return ErrNotFound
 }
 
-// ListIndexes returns index metadata for coll (empty slice if none/missing).
+// ListIndexes devuelve los metadatos de los índices de coll (slice vacío si no hay ninguno o no existe).
 func (s *Store) ListIndexes(coll string) ([]IndexInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -199,8 +199,8 @@ func (s *Store) ListIndexes(coll string) ([]IndexInfo, error) {
 	return out, nil
 }
 
-// applyIndexes after a doc change: remove old entries (if old non-nil), add new.
-// On unique failure during add, restores old entries.
+// applyIndexes tras un cambio de documento: quita las entradas antiguas (si old no es nil)
+// y agrega las nuevas. Si falla un único al agregar, restaura las entradas antiguas.
 func applyIndexes(c *collection, old, newDoc Document, id string) error {
 	for _, idx := range c.indexes {
 		if old != nil {
@@ -214,7 +214,7 @@ func applyIndexes(c *collection, old, newDoc Document, id string) error {
 		}
 	}
 	if firstErr != nil {
-		// rollback: drop whatever was added for newDoc, restore old
+		// rollback: eliminar lo agregado para newDoc y restaurar old
 		for _, idx := range c.indexes {
 			idx.removeDoc(newDoc, id)
 		}
@@ -233,11 +233,11 @@ func (s *Store) collRO(name string) (*collection, bool) {
 	return c, ok
 }
 
-// maxDocBytes is NF1: 1 MB per document (DESIGN §3.1).
+// maxDocBytes es NF1: 1 MB por documento (DESIGN §3.1).
 const maxDocBytes = 1 << 20
 
-// docID extracts _id from doc. Missing/empty _id ⇒ auto ULID (DESIGN §3.1).
-// Mutates doc when generating.
+// docID extrae el _id del documento. Si falta o está vacío ⇒ ULID automático (DESIGN §3.1).
+// Muta el documento cuando lo genera.
 func docID(doc Document) (string, error) {
 	v, ok := doc["_id"]
 	if !ok || v == nil {
@@ -252,9 +252,9 @@ func docID(doc Document) (string, error) {
 	return id, nil
 }
 
-// checkDocSize rejects docs > 1MB (NF1) before insert/upsert.
+// checkDocSize rechaza documentos de más de 1MB (NF1) antes de insert/upsert.
 func checkDocSize(doc Document) error {
-	// cheap path: marshal only if map is large; always check for safety
+	// camino rápido: serializar solo si el mapa es grande; comprobar siempre por seguridad
 	b, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrBadFilter, err)
@@ -265,7 +265,7 @@ func checkDocSize(doc Document) error {
 	return nil
 }
 
-// clone deep-copies doc so callers cannot mutate stored docs (nested too).
+// clone copia en profundidad el documento para que quien llama no pueda mutar los documentos guardados (también los anidados).
 func clone(doc Document) Document {
 	out := make(Document, len(doc))
 	for k, v := range doc {
@@ -274,9 +274,9 @@ func clone(doc Document) Document {
 	return out
 }
 
-// cloneShallow copies only top-level slots. Safe for Update rollback/index
-// snapshot: Update replaces top-level keys and never mutates nested values
-// in place, so shared nested refs stay intact for extractIndexRows(old).
+// cloneShallow copia solo el primer nivel. Es seguro para el rollback de Update y para
+// la instantánea de índices: Update reemplaza claves de primer nivel y nunca muta
+// valores anidados in situ, así que las referencias anidadas compartidas siguen intactas para extractIndexRows(old).
 func cloneShallow(doc Document) Document {
 	out := make(Document, len(doc))
 	for k, v := range doc {
@@ -285,8 +285,8 @@ func cloneShallow(doc Document) Document {
 	return out
 }
 
-// cloneValue deep-copies JSON-like values (maps/slices); scalars returned as-is.
-// map[string]any stays map[string]any (not Document) so type asserts keep working.
+// cloneValue copia en profundidad valores tipo JSON (mapas/slices); los escalares se devuelven tal cual.
+// map[string]any se mantiene como map[string]any (no Document) para que las aserciones de tipo sigan funcionando.
 func cloneValue(v any) any {
 	switch t := v.(type) {
 	case Document:
@@ -322,7 +322,7 @@ func cloneValue(v any) any {
 	}
 }
 
-// Insert adds doc; fails if _id missing, already exists, unique conflict, or >1MB.
+// Insert agrega el documento; falla si falta el _id, ya existe, hay conflicto de único o supera 1MB.
 func (s *Store) Insert(coll string, doc Document) error {
 	if err := s.insertDoc(nil, coll, doc); err != nil {
 		return err
@@ -330,13 +330,13 @@ func (s *Store) Insert(coll string, doc Document) error {
 	return s.afterMutation()
 }
 
-// insertDoc is Insert/Session.Insert with optional RBAC session (M4).
-// nil sess = raw Store API (allowed only while no users exist).
+// insertDoc es Insert/Session.Insert con sesión RBAC opcional (M4).
+// sess nil = API cruda del Store (permitida solo mientras no existan usuarios).
 func (s *Store) insertDoc(sess *Session, coll string, doc Document) error {
 	return s.insertDocFrame(nil, sess, coll, doc)
 }
 
-// insertDocFrame runs before/after hooks around the locked apply (M5a).
+// insertDocFrame ejecuta los hooks before/after alrededor de la aplicación con bloqueo (M5a).
 func (s *Store) insertDocFrame(frame *hookFrame, sess *Session, coll string, doc Document) error {
 	id, err := docID(doc)
 	if err != nil {
@@ -388,14 +388,14 @@ func (s *Store) insertApply(sess *Session, coll string, id string, doc Document)
 	return nil
 }
 
-// previewWrite auth-checks under RLock (before-hook phase; no side effects).
+// previewWrite comprueba los permisos bajo RLock (fase de hook before; sin efectos secundarios).
 func (s *Store) previewWrite(sess *Session, coll string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.checkWriteLocked(sess, coll)
 }
 
-// previewMissing returns errIfPresent when the id already exists (pre-hook).
+// previewMissing devuelve errIfPresent cuando el id ya existe (fase previa a los hooks).
 func (s *Store) previewMissing(coll, id string, errIfPresent error) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -407,7 +407,7 @@ func (s *Store) previewMissing(coll, id string, errIfPresent error) error {
 	return nil
 }
 
-// previewDoc clones the current doc or ErrNotFound (before-hook phase).
+// previewDoc clona el documento actual o devuelve ErrNotFound (fase de hook before).
 func (s *Store) previewDoc(coll, id string) (Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -422,7 +422,7 @@ func (s *Store) previewDoc(coll, id string) (Document, error) {
 	return clone(d), nil
 }
 
-// Upsert replaces or creates the doc with the given _id (id wins over doc["_id"]).
+// Upsert reemplaza o crea el documento con el _id indicado (el id gana sobre doc["_id"]).
 func (s *Store) Upsert(coll string, id string, doc Document) error {
 	if err := s.upsertDoc(nil, coll, id, doc); err != nil {
 		return err
@@ -446,7 +446,7 @@ func (s *Store) upsertDocFrame(frame *hookFrame, sess *Session, coll string, id 
 		if err := s.previewWrite(sess, coll); err != nil {
 			return err
 		}
-		old, _ = s.previewDoc(coll, id) // nil when creating
+		old, _ = s.previewDoc(coll, id) // nil cuando se está creando
 		work := clone(doc)
 		if err := s.runBeforeHooks(frame, before, BeforeUpsert, coll, id, work, old); err != nil {
 			return err
@@ -494,7 +494,7 @@ func (s *Store) upsertApply(sess *Session, coll string, id string, doc Document)
 	return nil
 }
 
-// Update shallow-merges patch top-level keys into the existing doc.
+// Update fusiona superficialmente las claves de primer nivel de patch en el documento existente.
 func (s *Store) Update(coll string, id string, patch Document) error {
 	if err := s.updateDoc(nil, coll, id, patch); err != nil {
 		return err
@@ -502,10 +502,10 @@ func (s *Store) Update(coll string, id string, patch Document) error {
 	return s.afterMutation()
 }
 
-// UpdateFields is Update plus explicit top-level field removals (M8 wire:
-// Mongo $unset / replacement diffs). Removals are applied to the merged
-// preview before hooks run (hooks see the final shape) and land in the same
-// updateApply path, so triggers/async hooks behave exactly like an Update.
+// UpdateFields es Update más eliminaciones explícitas de campos de primer nivel (wire M8:
+// $unset de Mongo / diferencias de reemplazo). Las eliminaciones se aplican a la vista
+// previa fusionada antes de ejecutar los hooks (los hooks ven la forma final) y acaban en
+// el mismo camino updateApply, así que los triggers/hooks asíncronos se comportan igual que en un Update.
 func (s *Store) UpdateFields(coll string, id string, patch Document, remove []string) error {
 	if err := s.updateDocFrame(nil, nil, coll, id, patch, remove); err != nil {
 		return err
@@ -529,8 +529,8 @@ func (s *Store) updateDocFrame(frame *hookFrame, sess *Session, coll string, id 
 		if err != nil {
 			return err
 		}
-		// Hooks see the merged preview (old + patch) so set/unset act on the
-		// final shape; afterwards we diff back into patch + removals.
+		// Los hooks ven la vista previa fusionada (old + patch) para que set/unset actúen
+		// sobre la forma final; después se calcula la diferencia de vuelta a patch + eliminaciones.
 		merged := clone(old)
 		for k, v := range patch {
 			if k == "_id" {
@@ -608,8 +608,8 @@ func (s *Store) updateApply(sess *Session, coll string, id string, patch Documen
 	if err != nil {
 		return err
 	}
-	// COW: build next off to the side so a failed size/index check leaves the
-	// live resident map untouched (no in-place rollback).
+	// COW: se construye el nuevo mapa aparte para que un fallo de tamaño/índice deje
+	// intacto el mapa residente vivo (sin rollback in situ).
 	old := cloneShallow(doc)
 	next := cloneShallow(doc)
 	for k, v := range patch {
@@ -634,7 +634,7 @@ func (s *Store) updateApply(sess *Session, coll string, id string, patch Documen
 	return nil
 }
 
-// Delete removes doc by _id.
+// Delete elimina el documento por _id.
 func (s *Store) Delete(coll string, id string) error {
 	if err := s.deleteDoc(nil, coll, id); err != nil {
 		return err
@@ -692,7 +692,7 @@ func (s *Store) deleteApply(sess *Session, coll string, id string) error {
 			idx.removeDoc(doc, id)
 		}
 	}
-	// Evict from cache registry.
+	// Expulsar del registro de caché.
 	s.cacheMu.Lock()
 	if _, in := s.cache[e]; in {
 		s.evictEntryLocked(e)
@@ -701,8 +701,8 @@ func (s *Store) deleteApply(sess *Session, coll string, id string) error {
 	delete(c.entries, id)
 	s.markDirty()
 	s.noteEdgeMutation(coll)
-	// Resurrection guard: record DEL when a durable body exists or a flush
-	// snapshot may already include this doc.
+	// Guarda contra resurrección: registrar un DEL cuando existe un cuerpo duradero
+	// o la instantánea de un flush podría incluir ya este documento.
 	if s.sawFile || s.flushInProgress {
 		s.pendingDels = append(s.pendingDels, delItem{coll: coll, id: id, gen: s.dirtyGen})
 	}
@@ -711,10 +711,10 @@ func (s *Store) deleteApply(sess *Session, coll string, id string) error {
 
 func isNotFound(err error) bool { return err == ErrNotFound }
 
-// waitBackpressureLocked blocks while a flush is in progress and the number of
-// mutations since the last durable snapshot exceeds Options.MaxPendingWrites.
-// Caller holds s.mu (write). Wait releases s.mu so the flush can finish.
-// No-op when MaxPendingWrites is 0 (legacy unlimited).
+// waitBackpressureLocked bloquea mientras hay un flush en curso y el número de
+// mutaciones desde la última instantánea duradera supera Options.MaxPendingWrites.
+// El llamador tiene s.mu (escritura). Wait libera s.mu para que el flush pueda terminar.
+// No hace nada cuando MaxPendingWrites es 0 (comportamiento heredado, sin límite).
 func (s *Store) waitBackpressureLocked() {
 	limit := s.opts.maxPendingWrites()
 	if limit <= 0 || s.bpCond == nil {
@@ -725,9 +725,9 @@ func (s *Store) waitBackpressureLocked() {
 	}
 }
 
-// Get returns a copy of the doc, or ErrNotFound.
-// When ≥1 user exists (M4), raw Store reads return ErrUnauthorized — use
-// Authenticate → Session.Get instead.
+// Get devuelve una copia del documento, o ErrNotFound.
+// Cuando existe al menos 1 usuario (M4), las lecturas crudas del Store devuelven
+// ErrUnauthorized: usa Authenticate → Session.Get.
 func (s *Store) Get(coll string, id string) (Document, error) {
 	return s.getDoc(nil, coll, id)
 }
@@ -753,20 +753,20 @@ func (s *Store) getDoc(sess *Session, coll string, id string) (Document, error) 
 	return out, nil
 }
 
-// FindOptions controls result shape (sort/skip/limit from M1; projection M2).
+// FindOptions controla la forma del resultado (sort/skip/limit desde M1; proyección M2).
 type FindOptions struct {
-	Sort       map[string]int // 1 asc, -1 desc
+	Sort       map[string]int // 1 ascendente, -1 descendente
 	Limit      int
 	Skip       int
-	Projection []string // top-level fields to return (+ _id always); empty = all
+	Projection []string // campos de primer nivel a devolver (+ _id siempre); vacío = todos
 }
 
-// Find uses an index seek when possible (equality/$in on indexed field),
-// else full-scans coll. nil/empty filter returns all docs.
-// Filter operators: see filter.go ($eq $ne $gt $gte $lt $lte $in $nin $regex $exists $and $or $not $nor).
-// Results ordered by _id when no Sort is given (deterministic).
-// Only the returned page is cloned (refs held during sort/skip/limit).
-// When ≥1 user exists (M4), raw Store reads return ErrUnauthorized.
+// Find usa una búsqueda por índice cuando es posible (igualdad/$in sobre un campo indexado);
+// si no, recorre toda la colección coll. Un filtro nil/vacío devuelve todos los documentos.
+// Operadores de filtro: ver filter.go ($eq $ne $gt $gte $lt $lte $in $nin $regex $exists $and $or $not $nor).
+// Los resultados se ordenan por _id cuando no se indica Sort (determinista).
+// Solo se clona la página devuelta (las referencias se mantienen durante sort/skip/limit).
+// Cuando existe al menos 1 usuario (M4), las lecturas crudas del Store devuelven ErrUnauthorized.
 func (s *Store) Find(coll string, filter Document, opts *FindOptions) ([]Document, error) {
 	return s.findDocs(nil, coll, filter, opts)
 }
@@ -777,7 +777,7 @@ func (s *Store) findDocs(sess *Session, coll string, filter Document, opts *Find
 	if err := s.checkReadLocked(sess, coll); err != nil {
 		return nil, err
 	}
-	// Session fieldDeny: forbid filters that probe hidden fields (M4).
+	// fieldDeny de la sesión: prohíbe filtros que sondean campos ocultos (M4).
 	var deny map[string]bool
 	if sess != nil {
 		deny = sess.fieldDenySet(coll)
@@ -790,7 +790,7 @@ func (s *Store) findDocs(sess *Session, coll string, filter Document, opts *Find
 		return nil, nil
 	}
 
-	// Hold pointers into the store during match/sort; clone only the page out.
+	// Se mantienen punteros al almacén durante el match/sort; solo se clona la página de salida.
 	var refs []Document
 	plan := planCandidates(c, filter)
 	if plan.used {
@@ -803,8 +803,8 @@ func (s *Store) findDocs(sess *Session, coll string, filter Document, opts *Find
 				idList = append(idList, id)
 			}
 		}
-		// exact ⇒ candidates already satisfy the filter (no rematch).
-		// !exact ⇒ rematch each loaded doc (range / partial prefix).
+		// exact ⇒ los candidatos ya cumplen el filtro (sin volver a evaluar).
+		// !exact ⇒ se vuelve a evaluar cada documento cargado (rango / prefijo parcial).
 		var err error
 		refs, err = s.materializeRefs(c, idList, filter, !plan.exact)
 		if err != nil {
@@ -823,7 +823,7 @@ func (s *Store) findDocs(sess *Session, coll string, filter Document, opts *Find
 		}
 	}
 
-	// Sort: index-ordered short-circuit when sort field == range index field.
+	// Orden: atajo con el orden del índice cuando el campo de ordenación == campo del índice de rango.
 	sortedByIndex := false
 	if opts != nil && opts.Sort != nil && len(opts.Sort) == 1 && plan.order != nil {
 		for sf, dir := range opts.Sort {
@@ -835,7 +835,7 @@ func (s *Store) findDocs(sess *Session, coll string, filter Document, opts *Find
 			}
 		}
 	}
-	// Deterministic base order by _id only when no user Sort (or full sort later).
+	// Orden base determinista por _id solo cuando no hay Sort de usuario (o se hará una ordenación completa después).
 	if !sortedByIndex && (opts == nil || opts.Sort == nil || len(opts.Sort) == 0) {
 		sortRefsByID(refs)
 	}
@@ -859,7 +859,7 @@ func (s *Store) findDocs(sess *Session, coll string, filter Document, opts *Find
 		}
 	}
 
-	// Clone only what the caller receives (page, not the whole match set).
+	// Se clona solo lo que recibe quien llama (la página, no todo el conjunto de coincidencias).
 	out := make([]Document, len(refs))
 	for i, doc := range refs {
 		if opts != nil && len(opts.Projection) > 0 {
@@ -888,9 +888,9 @@ func reverseRefs(refs []Document) {
 	}
 }
 
-// sortByPartial sorts docs by sortSpec. If need>0 and need<n and spec has a
-// single key, uses a bounded max-heap of size need (O(n log k)); else full sort.
-// After a partial sort, only the first min(need,n) elements are correctly ordered.
+// sortByPartial ordena los documentos según sortSpec. Si need>0 y need<n y la especificación
+// tiene una sola clave, usa un max-heap acotado de tamaño need (O(n log k)); si no, ordenación completa.
+// Tras una ordenación parcial, solo los primeros min(need,n) elementos quedan correctamente ordenados.
 func sortByPartial(docs []Document, spec map[string]int, need int) {
 	if need <= 0 || need >= len(docs) || len(spec) != 1 {
 		sortBy(docs, spec)
@@ -901,7 +901,7 @@ func sortByPartial(docs []Document, spec map[string]int, need int) {
 	for k, d := range spec {
 		field, dir = k, d
 	}
-	// max-heap of (key, doc) keeping the `need` best according to dir
+	// max-heap de (clave, doc) que conserva los "need" mejores según dir
 	h := &docHeap{dir: dir}
 	for _, d := range docs {
 		h.push(d, d[field])
@@ -909,24 +909,24 @@ func sortByPartial(docs []Document, spec map[string]int, need int) {
 			h.pop()
 		}
 	}
-	// extract in order into docs[0:need], rest stay as-is (unordered tail)
+	// se extraen en orden a docs[0:need]; el resto queda como estaba (cola desordenada)
 	n := h.Len()
 	for i := n - 1; i >= 0; i-- {
 		docs[i] = h.pop()
 	}
 }
 
-// docHeap keeps the `need` best docs: for asc (dir>0) evict largest; for desc evict smallest.
+// docHeap conserva los "need" mejores documentos: para asc (dir>0) expulsa el mayor; para desc, el menor.
 type docHeap struct {
 	keys []any
 	docs []Document
-	dir  int // 1 asc, -1 desc
+	dir  int // 1 ascendente, -1 descendente
 }
 
 func (h *docHeap) Len() int { return len(h.docs) }
 
-// betterKey reports whether key a is preferable to b (a should be kept over b).
-// Ascending: smaller key is better; Descending: larger key is better.
+// betterKey indica si la clave a es preferible a b (a debe conservarse en lugar de b).
+// Ascendente: la clave menor es mejor; Descendente: la clave mayor es mejor.
 func (h *docHeap) betterKey(a, b any) bool {
 	cmp := compareValues(a, b)
 	if h.dir < 0 {
@@ -935,11 +935,11 @@ func (h *docHeap) betterKey(a, b any) bool {
 	return cmp < 0
 }
 
-// worstIdx returns the index of the worst kept element (candidate to evict).
+// worstIdx devuelve el índice del peor elemento conservado (candidato a expulsar).
 func (h *docHeap) worstIdx() int {
 	wi := 0
 	for i := 1; i < len(h.keys); i++ {
-		// if keys[wi] is better than keys[i], then i is worse
+		// si keys[wi] es mejor que keys[i], entonces i es peor
 		if h.betterKey(h.keys[wi], h.keys[i]) {
 			wi = i
 		}
@@ -952,7 +952,7 @@ func (h *docHeap) push(d Document, k any) {
 	h.keys = append(h.keys, k)
 }
 
-// pop removes and returns the worst kept element.
+// pop elimina y devuelve el peor elemento conservado.
 func (h *docHeap) pop() Document {
 	wi := h.worstIdx()
 	d := h.docs[wi]
@@ -961,38 +961,38 @@ func (h *docHeap) pop() Document {
 	return d
 }
 
-// planResult describes how the planner used indexes for one filter.
+// planResult describe cómo usó el planificador los índices para un filtro.
 type planResult struct {
 	cand       map[string]struct{}
-	order      []string // IDs in index order when a range seek produced them
-	orderField string   // indexed field corresponding to order (sort-by-index)
-	exact      bool     // no re-match needed
-	used       bool     // at least one index seek
-	index      []string // index fields used (Explain)
-	covered    []string // top-level filter fields served by equality seeks
+	order      []string // IDs en orden de índice cuando los produjo una búsqueda por rango
+	orderField string   // campo indexado correspondiente a order (ordenar por índice)
+	exact      bool     // no hace falta volver a evaluar
+	used       bool     // se usó al menos una búsqueda por índice
+	index      []string // campos de índice usados (Explain)
+	covered    []string // campos de filtro de primer nivel cubiertos por búsquedas de igualdad
 }
 
-// fieldPlan is one top-level filter field classified for the planner.
+// fieldPlan es un campo de filtro de primer nivel clasificado por el planificador.
 type fieldPlan struct {
 	field   string
 	eqVals  []any
 	isEq    bool
 	rb      rangeBound
 	isRange bool
-	blocked bool // logical op or unsupported cond
+	blocked bool // operación lógica o condición no soportada
 }
 
-// planCandidates seeks indexes for equality/$in (single + compound prefix)
-// and ranges on the first indexed field. Ranges always set exact=false so
-// Find re-matches (cross-type / residual predicates). Logical ops force
-// re-match but do not block other field seeks.
+// planCandidates busca índices para igualdad/$in (simple + prefijo compuesto) y
+// rangos sobre el primer campo indexado. Los rangos siempre ponen exact=false para
+// que Find vuelva a evaluar (tipos cruzados / predicados residuales). Las operaciones
+// lógicas fuerzan la reevaluación pero no bloquean las búsquedas de otros campos.
 func planCandidates(c *collection, filter Document) planResult {
 	res := planResult{exact: true}
 	if len(filter) == 0 || len(c.indexes) == 0 {
 		return planResult{exact: len(filter) == 0, used: false}
 	}
 
-	// Classify top-level fields.
+	// Clasificar los campos de primer nivel.
 	plans := make([]fieldPlan, 0, len(filter))
 	for field, cond := range filter {
 		if isLogicalOp(field) {
@@ -1010,10 +1010,10 @@ func planCandidates(c *collection, filter Document) planResult {
 		plans = append(plans, fieldPlan{field: field, blocked: true})
 	}
 
-	// Mark fields consumed by a multi-field compound equality seek.
+	// Marcar los campos consumidos por una búsqueda de igualdad compuesta de varios campos.
 	consumed := map[string]bool{}
 
-	// Pass 1: compound indexes — leading single-value equalities.
+	// Paso 1: índices compuestos — igualdades iniciales de un solo valor.
 	for _, idx := range c.indexes {
 		if len(idx.Fields) < 2 {
 			continue
@@ -1044,9 +1044,9 @@ func planCandidates(c *collection, filter Document) planResult {
 			res.covered = append(res.covered, f)
 		}
 	}
-	// Exact only if every covered field is fully equality-served; ranges/blocked clear exact below.
+	// Exacto solo si todos los campos cubiertos están servidos por igualdad; los rangos/bloqueados limpian exact más abajo.
 
-	// Pass 2: remaining single-field equality and ranges.
+	// Paso 2: igualdad y rangos restantes de un solo campo.
 	for _, fp := range plans {
 		if fp.blocked {
 			res.exact = false
@@ -1087,7 +1087,7 @@ func planCandidates(c *collection, filter Document) planResult {
 				res.order = ids
 				res.orderField = fp.field
 			} else {
-				// Preserve range order filtered by existing candidates.
+				// Conservar el orden del rango filtrado por los candidatos existentes.
 				filtered := make([]string, 0, len(ids))
 				for _, id := range ids {
 					if _, ok := res.cand[id]; ok {
@@ -1100,7 +1100,7 @@ func planCandidates(c *collection, filter Document) planResult {
 			}
 			res.used = true
 			res.index = idx.Fields
-			res.exact = false // ranges always re-match
+			res.exact = false // los rangos siempre vuelven a evaluar
 			continue
 		}
 		res.exact = false
@@ -1109,7 +1109,7 @@ func planCandidates(c *collection, filter Document) planResult {
 	if !res.used {
 		return planResult{exact: false, used: false}
 	}
-	// Reconcile ordered IDs with final candidate set (equality may have removed some).
+	// Reconciliar los IDs ordenados con el conjunto final de candidatos (la igualdad pudo quitar algunos).
 	if res.order != nil && res.cand != nil {
 		filtered := res.order[:0]
 		for _, id := range res.order {
@@ -1119,14 +1119,14 @@ func planCandidates(c *collection, filter Document) planResult {
 		}
 		res.order = filtered
 	}
-	// Every top-level field must be equality-covered for exactness.
+	// Todos los campos de primer nivel deben estar cubiertos por igualdad para que el plan sea exacto.
 	if len(res.covered) != len(filter) {
 		res.exact = false
 	}
 	return res
 }
 
-// singleEqualityFor returns a single literal equality value for field from plans.
+// singleEqualityFor devuelve un único valor literal de igualdad para un campo a partir de los planes.
 func singleEqualityFor(plans []fieldPlan, field string) (any, bool) {
 	for _, fp := range plans {
 		if fp.field == field && fp.isEq && len(fp.eqVals) == 1 {
@@ -1136,8 +1136,8 @@ func singleEqualityFor(plans []fieldPlan, field string) (any, bool) {
 	return nil, false
 }
 
-// seekEqualityField seeks $eq/literal/$in on field via single-field index
-// or as the leading field of a compound index.
+// seekEqualityField busca $eq/literal/$in sobre field mediante un índice de un solo campo
+// o como primer campo de un índice compuesto.
 func seekEqualityField(c *collection, field string, vals []any) (map[string]struct{}, []string, bool) {
 	if idx := findIndexForField(c, field); idx != nil {
 		got := map[string]struct{}{}
@@ -1148,7 +1148,7 @@ func seekEqualityField(c *collection, field string, vals []any) (map[string]stru
 		}
 		return got, idx.Fields, true
 	}
-	// Compound index with field as leading component ($in → union of prefix seeks).
+	// Índice compuesto con field como componente inicial ($in → unión de búsquedas por prefijo).
 	for _, idx := range c.indexes {
 		if len(idx.Fields) > 1 && idx.Fields[0] == field {
 			got := map[string]struct{}{}
@@ -1180,8 +1180,8 @@ func intersectIDs(dst, src map[string]struct{}) {
 	}
 }
 
-// rangeValues extracts a pure range conjunction ($gt/$gte/$lt/$lte only)
-// from a field condition. Mixed with other ops → not indexable as range.
+// rangeValues extrae una conjunción pura de rango (solo $gt/$gte/$lt/$lte)
+// de la condición de un campo. Si se mezcla con otros operadores → no indexable como rango.
 func rangeValues(cond any) (rangeBound, bool) {
 	var ops Document
 	switch t := cond.(type) {
@@ -1233,7 +1233,7 @@ func rangeValues(cond any) (rangeBound, bool) {
 	return rb, true
 }
 
-// ExplainResult reports how Find would execute a filter (point 5).
+// ExplainResult informa de cómo ejecutaría Find un filtro (punto 5).
 type ExplainResult struct {
 	Collection     string   `json:"collection"`
 	Plan           string   `json:"plan"` // COLLSCAN | IXSCAN
@@ -1246,7 +1246,7 @@ type ExplainResult struct {
 	CollectionSize int      `json:"collection_size"`
 }
 
-// Explain returns the query plan for filter without executing match on docs.
+// Explain devuelve el plan de consulta del filtro sin ejecutar el match sobre los documentos.
 func (s *Store) Explain(coll string, filter Document) ExplainResult {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1283,7 +1283,7 @@ func (s *Store) Explain(coll string, filter Document) ExplainResult {
 	return res
 }
 
-// equalityValues returns literal values for field: value, { $eq: v }, or { $in: [...] }.
+// equalityValues devuelve valores literales para field: value, { $eq: v } o { $in: [...] }.
 func equalityValues(cond any) ([]any, bool) {
 	if ops, ok := cond.(Document); ok && hasOpKeys(ops) {
 		if eq, has := ops["$eq"]; has && len(ops) == 1 {
@@ -1313,7 +1313,7 @@ func findIndexForField(c *collection, field string) *index {
 	return nil
 }
 
-// project keeps only _id + listed top-level fields (deep-copies values).
+// project conserva solo _id + los campos de primer nivel indicados (copia en profundidad de los valores).
 func project(doc Document, fields []string) Document {
 	out := Document{}
 	if v, ok := doc["_id"]; ok {
@@ -1330,9 +1330,9 @@ func project(doc Document, fields []string) Document {
 	return out
 }
 
-// Count returns number of matching docs without cloning them.
-// Pure equality/$in on indexed fields ⇒ O(1)/O(k) from the index (no scan).
-// When ≥1 user exists (M4), raw Store reads return ErrUnauthorized.
+// Count devuelve el número de documentos que coinciden sin clonarlos.
+// Igualdad/$in puros sobre campos indexados ⇒ O(1)/O(k) desde el índice (sin recorrido).
+// Cuando existe al menos 1 usuario (M4), las lecturas crudas del Store devuelven ErrUnauthorized.
 func (s *Store) Count(coll string, filter Document) (int, error) {
 	return s.countDocs(nil, coll, filter)
 }
@@ -1354,7 +1354,7 @@ func (s *Store) countDocs(sess *Session, coll string, filter Document) (int, err
 		return 0, nil
 	}
 	if len(filter) > 0 {
-		// Fast path: single-field equality/$in fully covered by one index.
+		// Camino rápido: igualdad/$in de un solo campo totalmente cubierto por un índice.
 		if n, hit := countIndexed(c, filter); hit {
 			return n, nil
 		}
@@ -1383,8 +1383,8 @@ func (s *Store) countDocs(sess *Session, coll string, filter Document) (int, err
 	return s.countMatches(c, ids, filter, true)
 }
 
-// countIndexed handles Count when filter is a single top-level field with
-// equality or $in only, and that field has a single-field index.
+// countIndexed resuelve Count cuando el filtro es un único campo de primer nivel con
+// solo igualdad o $in, y ese campo tiene un índice de un solo campo.
 func countIndexed(c *collection, filter Document) (int, bool) {
 	if len(filter) != 1 {
 		return 0, false
@@ -1401,7 +1401,7 @@ func countIndexed(c *collection, filter Document) (int, bool) {
 		if idx == nil {
 			return 0, false
 		}
-		// $in / multi-value equality: sum per value (unique keys don't overlap across values)
+		// $in / igualdad multivalor: sumar por valor (las claves únicas no se solapan entre valores)
 		n := 0
 		for _, v := range vals {
 			n += idx.countKey([]any{v})
@@ -1411,8 +1411,8 @@ func countIndexed(c *collection, filter Document) (int, bool) {
 	return 0, false
 }
 
-// Collections lists collection names (sorted). System collections
-// (_users/_roles, M4) are hidden.
+// Collections lista los nombres de colecciones (ordenados). Las colecciones del sistema
+// (_users/_roles, M4) quedan ocultas.
 func (s *Store) Collections() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1427,16 +1427,23 @@ func (s *Store) Collections() []string {
 	return names
 }
 
-// SchemaVersion returns the store schema version.
+// SchemaVersion devuelve la versión del esquema del almacén.
 func (s *Store) SchemaVersion() uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.schemaVersion
 }
 
-// CreateCollection registers an empty collection (M8 wire). It survives
-// flush/reopen via the META record even with no documents. Returns
-// ErrExists when the collection is already present.
+// Path devuelve la ruta del archivo de respaldo ("" en almacenes en memoria). Admin M9.
+func (s *Store) Path() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.path
+}
+
+// CreateCollection registra una colección vacía (wire M8). Sobrevive a flush/reopen
+// mediante el registro META incluso sin documentos. Devuelve ErrExists cuando la
+// colección ya existe.
 func (s *Store) CreateCollection(coll string) error {
 	return s.createCollection(nil, coll)
 }
@@ -1461,12 +1468,12 @@ func (s *Store) createCollection(sess *Session, coll string) error {
 	return nil
 }
 
-// DropCollection removes a collection and all its documents (M8 wire).
-// Every document goes through the normal delete path (DEL records, hooks,
-// cache eviction); afterwards the collection definition leaves the map and
-// the next flush META stops listing it. Stale DOC/IDX records from earlier
-// commits are ignored on reopen (the v2 scan is META-gated). Hooks may veto
-// individual deletes, leaving a partially dropped collection.
+// DropCollection elimina una colección y todos sus documentos (wire M8).
+// Cada documento pasa por el camino normal de borrado (registros DEL, hooks,
+// expulsión de caché); después la definición de la colección sale del mapa y el
+// siguiente META del flush deja de listarla. Los registros DOC/IDX obsoletos de
+// commits anteriores se ignoran al reabrir (el escaneo v2 está condicionado por META).
+// Los hooks pueden vetar borrados individuales, dejando la colección parcialmente eliminada.
 func (s *Store) DropCollection(coll string) error {
 	return s.dropCollection(nil, coll)
 }
@@ -1511,10 +1518,10 @@ func (s *Store) dropCollection(sess *Session, coll string) error {
 	return s.afterMutation()
 }
 
-// matchEqual removed — superseded by match() in filter.go (M2).
+// matchEqual se eliminó — lo sustituye match() en filter.go (M2).
 
 func equalJSON(a, b any) bool {
-	// Numbers from JSON are float64; accept int/float cross-compare.
+	// Los números que vienen de JSON son float64; se acepta comparación cruzada int/float.
 	af, aok := toFloat(a)
 	bf, bok := toFloat(b)
 	if aok && bok {
@@ -1548,8 +1555,8 @@ func sortBy(docs []Document, sortSpec map[string]int) {
 	if len(docs) < 2 {
 		return
 	}
-	// _id tiebreak first (lowest priority — later stable sorts keep it for equal keys).
-	// Then user keys in reverse alphabetical so the first alpha key wins.
+	// Desempate por _id primero (prioridad más baja — las ordenaciones estables posteriores lo mantienen para claves iguales).
+	// Después las claves de usuario en orden alfabético inverso para que gane la primera clave alfabética.
 	sort.SliceStable(docs, func(a, b int) bool {
 		return docs[a]["_id"].(string) < docs[b]["_id"].(string)
 	})
@@ -1558,7 +1565,7 @@ func sortBy(docs []Document, sortSpec map[string]int) {
 	for i := len(ordered) - 1; i >= 0; i-- {
 		k := ordered[i]
 		dir := sortSpec[k]
-		// precompute keys for this pass
+		// precalcular las claves de esta pasada
 		ks := make([]any, len(docs))
 		for di, d := range docs {
 			ks[di] = d[k]
@@ -1607,7 +1614,7 @@ func compareValues(a, b any) int {
 			return 0
 		}
 	}
-	// null/missing last-ish: nil < everything
+	// null/ausente al final: nil < todo
 	if a == nil {
 		if b == nil {
 			return 0

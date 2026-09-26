@@ -6,13 +6,13 @@ Este directorio describe el motor tal como está hoy: arquitectura, distribució
 
 | | |
 |---|---|
-| **Nombre interno** | `mlstore` (módulo `mlstoredb`, packages `db` + `wire`) |
+| **Nombre interno** | `mlstore` (módulo `mlstoredb`, packages `db` + `wire` + `adminweb`) |
 | **Lenguaje** | Go 1.26 (CGO solo para `-race` en tests) |
-| **Tipo** | Document store embebido (estilo MongoDB) + wire protocol Mongo |
+| **Tipo** | Document store embebido (estilo MongoDB) + wire protocol Mongo + consola web |
 | **Persistencia** | 1 archivo cifrado, formato **v2** (log de records + AES-256-GCM + Argon2id) |
 | **Modelo** | Docs en RAM con page cache (budget `Options.CacheBytes`); snapshot cifrado |
-| **Tests** | **201 PASS / 0 FAIL** (173 motor + 28 wire) |
-| **Producción** | ~11.834 líneas (db 7.541 + wire 4.293) · **Tests** ~6.396 líneas · 52 archivos `.go` en packages (db 41 + wire 11) + `tools/` |
+| **Tests** | **233 PASS / 0 FAIL** (db 181 + wire 28 + adminweb 24) · `-race` verde en los 3 paquetes |
+| **Producción** | 15.743 líneas Go (db 8.328 + wire 4.580 + adminweb 2.296 + tools 539) + UI embebida 2.204 L · 40 archivos `.go` (+ tools) |
 
 ---
 
@@ -28,13 +28,16 @@ Este directorio describe el motor tal como está hoy: arquitectura, distribució
 8. [PLAN_V2](PLAN_V2.md) — bitácora del plan v2 (M0→M9): RBAC, hooks, triggers, grafo, wire Mongo
 9. [MANUAL](manual/) — guía práctica por tema (ES/EN): conexión, CRUD, joins, triggers, grafos, servidor Mongo · [manual.html](manual/manual.html) interactivo
 
-**Estado v2:** plan M0–M8 cerrado — extracción a `package db`, formato v2 paginado +
-page cache, `index_matrix` CSR persistida, Find paralelo + backpressure + Update COW,
-RBAC embebido (`Authenticate`→`Session`, `_users`/`_roles`), hooks Go, triggers
-JSON declarativos, grafo (`edges.<tipo>`, `Neighbors`/`Traverse`/`ShortestPath`) y
-**wire protocol Mongo-compatible** (`wire/`, `tools/mls-server` para Navicat/Compass/mongosh).
-Estadísticas: **201 PASS / 0 FAIL**, 51 archivos `.go` (db 7.541 L + wire 4.293 L ·
-tests 6.396 L), `-race` verde. M9 (consola web admin + canvas de grafos) pendiente.
+**Estado v2:** plan M0–M9 **cerrado + auditado (M9x)** — extracción a `package db`, formato v2
+paginado + page cache, `index_matrix` CSR persistida, Find paralelo + backpressure + Update
+COW, RBAC embebido (`Authenticate`→`Session`, `_users`/`_roles`), hooks Go, triggers JSON
+declarativos, grafo (`edges.<tipo>`, `Neighbors`/`Traverse`/`ShortestPath`), wire protocol
+Mongo-compatible (`wire/`, `tools/mls-server`) y **consola web** (`adminweb/`): M9a auth+CRUD ✅,
+M9b import/export+índices+triggers ✅, M9c canvas de grafos ✅, M9d usuarios/roles+consola ✅.
+M9x: auditoría docs↔código, restauración de la UI completa (i18n ES/EN, índices, io, triggers,
+grafos, admin) y corrección de bugs del forwarder multi-BD — informe:
+[INFORME_AUDITORIA.md](INFORME_AUDITORIA.md).
+Estadísticas: **233 PASS / 0 FAIL**, `-race` verde (db + wire + adminweb).
 
 ---
 
@@ -135,6 +138,7 @@ Ver [RECREAR.md](RECREAR.md) para extraer a módulo independiente.
 | M6 Grafo (`edges.*`, Neighbors/Traverse/ShortestPath) | ✅ |
 | M7 Docs + benchmarks + race final | ✅ |
 | M8 Wire protocol Mongo-compatible (`wire/`, `mls-server`) | ✅ |
-| M9 Consola web: admin + canvas de grafos | ⬜ pendiente de aprobación |
+| M9 Consola web: admin + canvas de grafos (`adminweb/`) | ✅ M9a✅ M9b✅ M9c✅ M9d✅ |
+| M9x Auditoría docs↔código + restauración UI + bugs multi-BD | ✅ informe: [INFORME_AUDITORIA](INFORME_AUDITORIA.md) |
 
 Docs de motor: `doc/*`, bitácora `doc/PLAN_V2.md`, `scripts/test-race.ps1` (`-race` con CGO+gcc MSYS2).

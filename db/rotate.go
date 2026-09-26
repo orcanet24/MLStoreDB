@@ -7,32 +7,32 @@ import (
 	"time"
 )
 
-// RotateKeys re-keys the encrypted file at s.path to a new master key and/or
-// machine id WITHOUT re-encrypting the payload (D16-style header-only op).
+// RotateKeys vuelve a clavar el archivo cifrado en s.path con una nueva clave maestra
+// y/o id de máquina SIN volver a cifrar la carga útil (operación de cabecera estilo D16).
 //
-// Why it works: the payload is sealed with the per-file DEK, which never
-// changes; only the DEK *wrap* depends on the KEK (master ⊕ machineID ⊕ salt).
-// So rotation = re-derive KEK with the new material, re-wrap the SAME DEK,
-// and rewrite header+wrap bytes while copying the payload ciphertext bytes
-// untouched. Cost is O(1) regardless of database size (~µs, one file rewrite
-// of the 152B header plus the payload copy by the filesystem).
+// Por qué funciona: la carga útil va sellada con la DEK del archivo, que nunca cambia;
+// solo el *envolvimiento* de la DEK depende de la KEK (master ⊕ machineID ⊕ salt). Así que
+// rotar = rederivar la KEK con el material nuevo, volver a envolver la MISMA DEK y reescribir
+// los bytes de cabecera+envoltorio copiando el criptograma de la carga útil sin tocarlo.
+// El coste es O(1) independientemente del tamaño de la base de datos (~µs, una reescritura
+// del archivo para la cabecera de 152B más la copia de la carga útil que hace el sistema de archivos).
 //
-// Safety:
-//   - The store must be opened on s.path, clean (Flush first), not closed.
-//   - Rotating while dirty would leave the on-disk file stale vs RAM; refuse.
-//   - Serialized against Flush/Snapshot via flushMu; readers/writers keep
-//     working with the in-RAM DEK, which does not change.
-//   - Fresh GCM nonce for the new wrap; new salt avoids nonce reuse of the
-//     wrap AEAD (wrapNonce = salt[:12]).
-//   - Verified against the OLD KEK first; a wrong current key fails with
-//     ErrCorrupt and the file is left untouched.
-//   - The rotated file is durably fsynced before returning.
+// Seguridad:
+//   - El almacén debe estar abierto sobre s.path, limpio (haz Flush antes) y no cerrado.
+//   - Rotar con datos sucios dejaría el archivo en disco desfasado respecto a la RAM; se rechaza.
+//   - Se serializa con Flush/Snapshot mediante flushMu; los lectores/escritores siguen
+//     trabajando con la DEK que está en RAM, que no cambia.
+//   - Nonce GCM nuevo para el envoltorio; el salt nuevo evita reutilizar el nonce del
+//     AEAD del envoltorio (wrapNonce = salt[:12]).
+//   - Se verifica primero contra la KEK ANTIGUA; una clave actual incorrecta falla con
+//     ErrCorrupt y el archivo queda intacto.
+//   - El archivo rotado se sincroniza de forma duradera (fsync) antes de retornar.
 //
-// Pass the empty string in a field to keep the current value. The in-RAM
-// store adopts the new credentials, so subsequent Flushes keep using them.
+// Pasa la cadena vacía en un campo para conservar el valor actual. El almacén en RAM
+// adopta las nuevas credenciales, así que los Flush posteriores siguen usándolas.
 //
-// Typical uses: provider master-key rotation (plan §3), moving the database
-// to another machine (paired with ResolveMachineID), post-compromise rekey.
+// Usos típicos: rotación de la clave maestra del proveedor (plan §3), mover la base de
+// datos a otra máquina (junto con ResolveMachineID) y re-clavado tras un compromiso.
 func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 	s.flushMu.Lock()
 	defer s.flushMu.Unlock()
@@ -50,7 +50,7 @@ func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 		return errors.New("db: RotateKeys requires a clean store (Flush first)")
 	}
 
-	// Snapshot current crypto material + effective machine id.
+	// Instantánea del material criptográfico actual + id de máquina efectivo.
 	s.mu.RLock()
 	curMaster := append([]byte(nil), s.opts.MasterKey...)
 	curMachine := append([]byte(nil), s.machine...)
@@ -69,7 +69,7 @@ func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 		newMachineID = string(curMachine)
 	}
 
-	// Read, parse and authenticate the current file (old KEK must verify).
+	// Leer, interpretar y autenticar el archivo actual (la KEK antigua debe verificar).
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -90,7 +90,7 @@ func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 		return ErrCorrupt
 	}
 
-	// New salt (fresh wrap nonce = salt[:12]; payload nonce stays in header).
+	// Salt nuevo (nonce del nuevo envoltorio = salt[:12]; el nonce de la carga sigue en la cabecera).
 	newSalt, err := randomBytes(16)
 	if err != nil {
 		return err
@@ -106,7 +106,7 @@ func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 
 	nh := &header{
 		FormatVer:     formatVersion,
-		Flags:         h.Flags, // payload bytes are copied verbatim
+		Flags:         h.Flags, // los bytes de la carga se copian tal cual
 		SchemaVersion: schemaVersion,
 		CreatedAt:     created,
 		UpdatedAt:     uint64(time.Now().Unix()),
@@ -115,14 +115,14 @@ func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 		KDFPar:        p,
 	}
 	copy(nh.KDFSalt[:], newSalt)
-	copy(nh.NonceBase[:], h.NonceBase[:]) // payload GCM nonce unchanged
+	copy(nh.NonceBase[:], h.NonceBase[:]) // el nonce GCM de la carga no cambia
 	copy(nh.DEKWrapped[:], wrapped)
 	nh.setHMAC(newKEK)
 
 	out := make([]byte, 0, len(data))
 	out = append(out, nh.marshalBody()...)
 	out = append(out, nh.HeaderHMAC[:]...)
-	out = append(out, data[headerSize:]...) // ciphertext copied as-is: O(1) rotate
+	out = append(out, data[headerSize:]...) // criptograma copiado tal cual: rotación O(1)
 	if err := atomicReplace(path, out); err != nil {
 		return err
 	}
@@ -130,9 +130,9 @@ func (s *Store) RotateKeys(newMaster []byte, newMachineID string) error {
 		return err
 	}
 
-	// Adopt new credentials in RAM (opts.MasterKey + machine) so the next
-	// Flush re-wraps with the new KEK and Open() from a fresh process agrees.
-	// Header rewrite is O(1); body records are DEK-sealed and stay valid.
+	// Adoptar las nuevas credenciales en RAM (opts.MasterKey + máquina) para que el próximo
+	// Flush vuelva a envolver con la nueva KEK y Open() desde un proceso nuevo coincida.
+	// La reescritura de la cabecera es O(1); los registros del cuerpo van sellados con la DEK y siguen válidos.
 	s.mu.Lock()
 	s.opts.MasterKey = append([]byte(nil), newMaster...)
 	s.opts.MachineID = newMachineID

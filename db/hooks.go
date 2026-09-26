@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// Hook events (M5a). String ids so M5b JSON triggers can reuse them.
+// Eventos de hook (M5a). Ids de tipo string para que los triggers JSON de M5b puedan reutilizarlos.
 const (
 	BeforeInsert = "before_insert"
 	AfterInsert  = "after_insert"
@@ -17,31 +17,31 @@ const (
 )
 
 const (
-	// maxHookDepth bounds nested hook-triggered mutations (M5a).
+	// maxHookDepth acota las mutaciones anidadas disparadas por hooks (M5a).
 	maxHookDepth = 8
-	// hookQueueSize is the bounded FIFO for OnAsync jobs.
+	// hookQueueSize es la FIFO acotada de trabajos de OnAsync.
 	hookQueueSize = 1024
 )
 
-// HookFunc runs for a matched event. Before-* hooks run synchronously and
-// may veto the mutation by returning an error. After-* hooks run after the
-// mutation is applied (On: inline, error ignored; OnAsync: queued).
-// Nested mutations MUST go through HookContext methods (depth/cycle guards).
+// HookFunc se ejecuta para un evento coincidente. Los hooks before-* corren de forma
+// síncrona y pueden vetar la mutación devolviendo un error. Los hooks after-* corren
+// después de aplicar la mutación (On: en línea, el error se ignora; OnAsync: en cola).
+// Las mutaciones anidadas DEBEN pasar por los métodos de HookContext (guardas de profundidad/ciclo).
 type HookFunc func(h *HookContext) error
 
-// HookContext is passed to a hook: event payload + scoped Store access.
+// HookContext se pasa a un hook: carga útil del evento + acceso al Store con alcance.
 type HookContext struct {
 	Event      string
 	Collection string
 	ID         string
-	Doc        Document // new doc / patch (insert/update/upsert); nil for delete
-	Old        Document // pre-image (update/delete/upsert); nil for insert
+	Doc        Document // documento nuevo / patch (insert/update/upsert); nil para delete
+	Old        Document // imagen previa (update/delete/upsert); nil para insert
 
 	frame *hookFrame
 	store *Store
 }
 
-// Get/Find/Count are read helpers (run as trusted hook principal).
+// Get/Find/Count son ayudantes de lectura (se ejecutan como principal de confianza del hook).
 func (h *HookContext) Get(coll string, id string) (Document, error) {
 	return h.store.getDoc(hookBypass, coll, id)
 }
@@ -54,8 +54,8 @@ func (h *HookContext) Count(coll string, filter Document) (int, error) {
 	return h.store.countDocs(hookBypass, coll, filter)
 }
 
-// Insert/Upsert/Update/Delete propagate the hook frame (depth + cycle checks).
-// They run as hookBypass (trusted; RBAC does not gate hook code).
+// Insert/Upsert/Update/Delete propagan el marco del hook (comprobaciones de profundidad + ciclo).
+// Se ejecutan como hookBypass (de confianza; el RBAC no controla el código de los hooks).
 func (h *HookContext) Insert(coll string, doc Document) error {
 	return h.store.insertDocFrame(h.frame, hookBypass, coll, doc)
 }
@@ -72,12 +72,12 @@ func (h *HookContext) Delete(coll string, id string) error {
 	return h.store.deleteDocFrame(h.frame, hookBypass, coll, id)
 }
 
-// hookBypass is the trusted principal for hook-initiated mutations.
-// system=true ⇒ valid without being in the sessions map; RBAC skips it.
-// Store ops still refuse system collections for everyone.
+// hookBypass es el principal de confianza para las mutaciones iniciadas por hooks.
+// system=true ⇒ válido sin estar en el mapa de sesiones; el RBAC lo salta.
+// Las operaciones del Store siguen rechazando las colecciones del sistema para todos.
 var hookBypass = &Session{system: true, user: "_hook"}
 
-// hookFrame links one hook invocation to its ancestors (depth + cycle walk).
+// hookFrame enlaza una invocación de hook con sus ancestros (recorrido de profundidad + ciclo).
 type hookFrame struct {
 	parent *hookFrame
 	hookID uint64
@@ -87,7 +87,7 @@ type hookFrame struct {
 type hookReg struct {
 	id    uint64
 	event string
-	coll  string // "" or "*" = all collections
+	coll  string // "" o "*" = todas las colecciones
 	fn    HookFunc
 	async bool
 }
@@ -100,18 +100,18 @@ type hookJob struct {
 	id      string
 	doc     Document
 	old     Document
-	barrier chan struct{} // WaitAsyncHooks sentinel (reg == nil)
+	barrier chan struct{} // centinela de WaitAsyncHooks (reg == nil)
 }
 
-// On registers a synchronous hook. coll "" or "*" matches every collection.
-// Before-* hooks may veto (return error); after-* errors are ignored.
+// On registra un hook síncrono. coll "" o "*" coincide con todas las colecciones.
+// Los hooks before-* pueden vetar (devolver error); los errores de after-* se ignoran.
 func (s *Store) On(event string, coll string, fn HookFunc) (uint64, error) {
 	return s.addHook(event, coll, fn, false)
 }
 
-// OnAsync registers an after-* hook on the bounded FIFO worker queue.
-// Enqueue blocks when the queue is full (backpressure). Before-* rejected:
-// async hooks cannot veto.
+// OnAsync registra un hook after-* en la cola FIFO acotada del worker.
+// Encolar bloquea cuando la cola está llena (contrapresión). Los before-* se rechazan:
+// los hooks asíncronos no pueden vetar.
 func (s *Store) OnAsync(event string, coll string, fn HookFunc) (uint64, error) {
 	switch event {
 	case AfterInsert, AfterUpdate, AfterDelete, AfterUpsert:
@@ -136,7 +136,7 @@ func (s *Store) addHook(event string, coll string, fn HookFunc, async bool) (uin
 	return id, nil
 }
 
-// Off removes a hook by id; reports whether it existed.
+// Off elimina un hook por id; indica si existía.
 func (s *Store) Off(id uint64) bool {
 	s.hooksMu.Lock()
 	defer s.hooksMu.Unlock()
@@ -162,7 +162,7 @@ func collMatch(pattern, coll string) bool {
 	return pattern == "" || pattern == "*" || pattern == coll
 }
 
-// matchHooks returns regs for event+coll. Caller must not hold hooksMu.
+// matchHooks devuelve los registros de event+coll. El llamador no debe tener hooksMu.
 func (s *Store) matchHooks(event, coll string) []*hookReg {
 	s.hooksMu.Lock()
 	defer s.hooksMu.Unlock()
@@ -175,7 +175,7 @@ func (s *Store) matchHooks(event, coll string) []*hookReg {
 	return out
 }
 
-// beginHookErr validates depth + cycle and builds the child context.
+// beginHookErr valida profundidad + ciclo y construye el contexto hijo.
 func (s *Store) beginHookErr(parent *hookFrame, r *hookReg) (*HookContext, error) {
 	depth := 1
 	if parent != nil {
@@ -195,7 +195,7 @@ func (s *Store) beginHookErr(parent *hookFrame, r *hookReg) (*HookContext, error
 	}, nil
 }
 
-// runBeforeHooks executes matched before-* regs; first error vetoes.
+// runBeforeHooks ejecuta los registros before-* coincidentes; el primer error veta.
 func (s *Store) runBeforeHooks(frame *hookFrame, regs []*hookReg, event, coll, id string, doc, old Document) error {
 	for _, r := range regs {
 		h, err := s.beginHookErr(frame, r)
@@ -210,7 +210,7 @@ func (s *Store) runBeforeHooks(frame *hookFrame, regs []*hookReg, event, coll, i
 	return nil
 }
 
-// runAfterHooksInline executes sync after-* regs (errors ignored).
+// runAfterHooksInline ejecuta los registros after-* síncronos (los errores se ignoran).
 func (s *Store) runAfterHooksInline(frame *hookFrame, regs []*hookReg, event, coll, id string, doc, old Document) {
 	for _, r := range regs {
 		h, err := s.beginHookErr(frame, r)
@@ -222,8 +222,8 @@ func (s *Store) runAfterHooksInline(frame *hookFrame, regs []*hookReg, event, co
 	}
 }
 
-// queueAfterHook dispatches after-* regs: sync inline, async to FIFO queue.
-// No-op when no regs match (zero overhead without hooks).
+// queueAfterHook despacha los registros after-*: síncronos en línea, asíncronos a la cola FIFO.
+// No hace nada si no coincide ningún registro (coste cero cuando no hay hooks).
 func (s *Store) queueAfterHook(frame *hookFrame, event, coll, id string, doc, old Document) {
 	regs := s.matchHooks(event, coll)
 	if len(regs) == 0 {
@@ -251,7 +251,7 @@ func (s *Store) queueAfterHook(frame *hookFrame, event, coll, id string, doc, ol
 			return
 		}
 		select {
-		case q <- job: // blocks when full (bounded FIFO backpressure)
+		case q <- job: // bloquea cuando está llena (contrapresión de la FIFO acotada)
 		case <-stop:
 			return
 		}
@@ -265,7 +265,7 @@ func cloneDocSafe(d Document) Document {
 	return clone(d)
 }
 
-// ensureHookWorker lazily starts the async FIFO worker.
+// ensureHookWorker arranca de forma perezosa el worker asíncrono de la FIFO.
 func (s *Store) ensureHookWorker() {
 	s.hooksMu.Lock()
 	defer s.hooksMu.Unlock()
@@ -279,8 +279,8 @@ func (s *Store) ensureHookWorker() {
 	go s.hookWorker(q, stop, done)
 }
 
-// hookWorker drains the bounded FIFO. Channels are passed in (not re-read
-// from fields) so stopHookWorker can nil the fields without a race.
+// hookWorker drena la FIFO acotada. Los canales se pasan como argumentos (no se releen
+// de los campos) para que stopHookWorker pueda anular los campos sin carrera.
 func (s *Store) hookWorker(q <-chan hookJob, stop <-chan struct{}, done chan struct{}) {
 	defer close(done)
 	for {
@@ -294,7 +294,7 @@ func (s *Store) hookWorker(q <-chan hookJob, stop <-chan struct{}, done chan str
 			}
 			h, err := s.beginHookErr(job.frame, job.reg)
 			if err != nil {
-				continue // cycle/depth on async path: drop
+				continue // ciclo/profundidad en el camino asíncrono: descartar
 			}
 			h.Event, h.Collection, h.ID, h.Doc, h.Old =
 				job.event, job.coll, job.id, job.doc, job.old
@@ -303,7 +303,7 @@ func (s *Store) hookWorker(q <-chan hookJob, stop <-chan struct{}, done chan str
 	}
 }
 
-// stopHookWorker stops the async worker (Close). Drops undelivered jobs.
+// stopHookWorker detiene el worker asíncrono (Close). Descarta los trabajos no entregados.
 func (s *Store) stopHookWorker() {
 	s.hooksMu.Lock()
 	stop, done := s.hookStop, s.hookDone
@@ -316,8 +316,8 @@ func (s *Store) stopHookWorker() {
 	<-done
 }
 
-// WaitAsyncHooks blocks until every queued async job is done (barrier).
-// Test/ops helper — do not call from inside a hook (deadlock).
+// WaitAsyncHooks bloquea hasta que todos los trabajos asíncronos en cola terminan (barrera).
+// Ayudante para tests/operaciones — no lo llames desde dentro de un hook (deadlock).
 func (s *Store) WaitAsyncHooks() {
 	s.hooksMu.Lock()
 	q, stop := s.hookQ, s.hookStop

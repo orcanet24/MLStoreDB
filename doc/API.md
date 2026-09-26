@@ -468,7 +468,8 @@ Usar siempre `errors.Is`.
 | RBAC / sesiones | ✅ M4 |
 | Hooks + triggers | ✅ M5a/M5b |
 | Grafo edges/traverse | ✅ M6 |
-| Wire protocol Mongo (OP_MSG) | ⬜ M8 pendiente de aprobación |
+| Wire protocol Mongo (OP_MSG) | ✅ M8 (`wire/`, `tools/mls-server`) |
+| Admin users/roles (`ListUsers`, `DeleteUser`, …) | ✅ M9d · `SetUserRoles` in-place ✅ M9x |
 | `$elemMatch`, `$where`, `$expr` | fuera de alcance |
 | Transacciones | fuera de alcance |
 | WAL | fuera de alcance |

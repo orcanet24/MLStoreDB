@@ -7,38 +7,39 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// triggersColl holds declarative trigger definitions (M5b system coll).
+// triggersColl guarda las definiciones declarativas de triggers (colección del sistema M5b).
 const triggersColl = "_triggers"
 
-// TriggerAction is one declarative step. Types:
-//   set     — merge Fields into the live doc (before: mutate Doc; after: self-Update)
-//   unset   — remove Names from the doc (before_* events only)
-//   insert  — insert Doc (with $get templates) into Collection (auto _id if absent)
-//   update  — patch Set into target id (target must exist)
-//   upsert  — replace/patch Set at target id
-//   delete  — delete target id
+// TriggerAction es un paso declarativo. Tipos:
 //
-// Template: any value {"$get":"field"} resolves against the event Doc;
-// {"$get":"old.field"} resolves against Old.
+//	set     — fusiona Fields en el documento vivo (before: muta Doc; after: self-Update)
+//	unset   — elimina Names del documento (solo eventos before_*)
+//	insert  — inserta Doc (con plantillas $get) en Collection (_id automático si falta)
+//	update  — aplica el patch Set al id destino (el destino debe existir)
+//	upsert  — reemplaza/aplica Set en el id destino
+//	delete  — elimina el id destino
+//
+// Plantilla: cualquier valor {"$get":"field"} se resuelve contra el Doc del evento;
+// {"$get":"old.field"} se resuelve contra Old.
 type TriggerAction struct {
 	Type       string         `json:"type"`
 	Collection string         `json:"collection,omitempty"`
-	ID         any            `json:"id,omitempty"` // string or {"$get":...}
+	ID         any            `json:"id,omitempty"` // string o {"$get":...}
 	Doc        map[string]any `json:"doc,omitempty"`
 	Fields     map[string]any `json:"fields,omitempty"`
 	Names      []string       `json:"names,omitempty"`
 	Set        map[string]any `json:"set,omitempty"`
 }
 
-// Trigger is a declarative rule stored in _triggers and registered as an
-// M5a hook (reuses depth/cycle/queue machinery).
+// Trigger es una regla declarativa que se guarda en _triggers y se registra como un
+// hook de M5a (reutiliza la maquinaria de profundidad/ciclo/cola).
 type Trigger struct {
-	ID         string         `json:"_id"`
-	Event      string         `json:"event"`
-	Collection string         `json:"collection"` // "" or "*" = all
-	Enabled    *bool          `json:"enabled,omitempty"`
-	Async      bool           `json:"async,omitempty"` // after_* only: run on FIFO queue
-	Filter     map[string]any `json:"filter,omitempty"`
+	ID         string          `json:"_id"`
+	Event      string          `json:"event"`
+	Collection string          `json:"collection"` // "" o "*" = todas
+	Enabled    *bool           `json:"enabled,omitempty"`
+	Async      bool            `json:"async,omitempty"` // solo after_*: se ejecuta en la cola FIFO
+	Filter     map[string]any  `json:"filter,omitempty"`
 	Actions    []TriggerAction `json:"actions"`
 }
 
@@ -46,8 +47,8 @@ func (t Trigger) enabled() bool {
 	return t.Enabled == nil || *t.Enabled
 }
 
-// CreateTrigger validates, persists into _triggers and registers the
-// underlying M5a hook. Returns the trigger _id.
+// CreateTrigger valida, persiste en _triggers y registra el hook subyacente de M5a.
+// Devuelve el _id del trigger.
 func (s *Store) CreateTrigger(t Trigger) (string, error) {
 	if err := validateTrigger(t); err != nil {
 		return "", err
@@ -73,7 +74,7 @@ func (s *Store) CreateTrigger(t Trigger) (string, error) {
 	return t.ID, nil
 }
 
-// DeleteTrigger removes the _triggers doc and unhooks it.
+// DeleteTrigger elimina el documento de _triggers y desengancha su hook.
 func (s *Store) DeleteTrigger(id string) error {
 	if id == "" {
 		return ErrNotFound
@@ -90,7 +91,7 @@ func (s *Store) DeleteTrigger(id string) error {
 	return nil
 }
 
-// ListTriggers returns all stored trigger definitions.
+// ListTriggers devuelve todas las definiciones de trigger guardadas.
 func (s *Store) ListTriggers() ([]Trigger, error) {
 	s.trigMu.Lock()
 	defer s.trigMu.Unlock()
@@ -183,8 +184,8 @@ func validateTriggerAction(a TriggerAction, event string) error {
 	return nil
 }
 
-// registerTriggerHook wires one Trigger onto the M5a registry.
-// Caller holds trigMu (and has finished ensureTriggersLoadedLocked).
+// registerTriggerHook conecta un Trigger al registro de M5a.
+// El llamador tiene trigMu (y ya terminó ensureTriggersLoadedLocked).
 func (s *Store) registerTriggerHook(t Trigger) error {
 	fn := func(h *HookContext) error {
 		return s.runTrigger(&t, h)
@@ -205,15 +206,15 @@ func (s *Store) registerTriggerHook(t Trigger) error {
 	return nil
 }
 
-// ensureTriggersLoaded registers hooks for persisted triggers once (idempotent).
+// ensureTriggersLoaded registra una sola vez (idempotente) los hooks de los triggers persistidos.
 func (s *Store) ensureTriggersLoaded() {
 	s.trigMu.Lock()
 	defer s.trigMu.Unlock()
 	s.ensureTriggersLoadedLocked()
 }
 
-// ensureTriggersLoadedLocked registers hooks for persisted triggers once.
-// Caller holds trigMu.
+// ensureTriggersLoadedLocked registra una sola vez los hooks de los triggers persistidos.
+// El llamador tiene trigMu.
 func (s *Store) ensureTriggersLoadedLocked() {
 	if s.triggersLoaded {
 		return
@@ -244,7 +245,7 @@ func (s *Store) ensureTriggersLoadedLocked() {
 	}
 }
 
-// runTrigger evaluates filter + actions inside an M5a HookContext.
+// runTrigger evalúa el filtro y las acciones dentro de un HookContext de M5a.
 func (s *Store) runTrigger(t *Trigger, h *HookContext) error {
 	target := h.Doc
 	if target == nil {
@@ -287,7 +288,7 @@ func (s *Store) runTriggerAction(a TriggerAction, h *HookContext) error {
 			}
 			return nil
 		}
-		// after_*: apply as self-update (Doc may be a patch for update events)
+		// after_*: aplicar como self-update (Doc puede ser un patch en eventos de update)
 		if h.ID == "" {
 			return nil
 		}
@@ -342,7 +343,7 @@ func (s *Store) runTriggerAction(a TriggerAction, h *HookContext) error {
 	return fmt.Errorf("db: unknown trigger action %q", a.Type)
 }
 
-// resolveMap deep-resolves {"$get":...} templates against doc/old.
+// resolveMap resuelve en profundidad las plantillas {"$get":...} contra doc/old.
 func resolveMap(m map[string]any, doc, old Document) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {
@@ -423,8 +424,8 @@ func docToTrigger(d Document, t *Trigger) error {
 	return json.Unmarshal(b, t)
 }
 
-// adminInsert writes a system-coll doc without RBAC (admin APIs only).
-// Does not fire hooks (trigger definitions are not events).
+// adminInsert escribe un documento de colección del sistema sin RBAC (solo APIs de administración).
+// No dispara hooks (las definiciones de trigger no son eventos).
 func (s *Store) adminInsert(coll string, doc Document) error {
 	id, err := docID(doc)
 	if err != nil {
@@ -451,7 +452,7 @@ func (s *Store) adminInsert(coll string, doc Document) error {
 	return nil
 }
 
-// adminDelete removes a system-coll doc without RBAC (admin APIs only).
+// adminDelete elimina un documento de colección del sistema sin RBAC (solo APIs de administración).
 func (s *Store) adminDelete(coll string, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -18,7 +18,7 @@ func TestDocSizeLimit1MB(t *testing.T) {
 	if !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("want ErrTooLarge, got %v", err)
 	}
-	// just under limit ok
+	// justo por debajo del límite, correcto
 	ok := make([]byte, maxDocBytes-100)
 	for i := range ok {
 		ok[i] = 'y'
@@ -58,7 +58,7 @@ func TestUpdateSizeLimitRollback(t *testing.T) {
 	}
 }
 
-// realistic-ish ml_orders payload for benchmarks
+// Carga útil tipo ml_orders (realista) para los benchmarks
 func benchDoc(i int) Document {
 	return Document{
 		"_id":        fmt.Sprintf("%d", i),
@@ -154,8 +154,8 @@ func BenchmarkExportCSV10k(b *testing.B) {
 	}
 }
 
-// complexDoc is a deep/nested ML-like payload (~real order with payments,
-// shipping, buyer profile, annotations arrays — multi-level maps/slices).
+// complexDoc es una carga útil profunda/anidada tipo ML (~un pedido real con pagos,
+// envío, perfil del comprador y arrays de anotaciones — mapas/slices multinivel).
 func complexDoc(i int) Document {
 	payments := make([]any, 0, 3)
 	for p := 0; p < 3; p++ {
@@ -226,7 +226,7 @@ func seedComplex(b *testing.B, n int) *Store {
 	return s
 }
 
-// Insert of deeply nested JSON (~2–4 KB/doc).
+// Inserción de JSON muy anidado (~2–4 KB por documento).
 func BenchmarkInsertComplex(b *testing.B) {
 	s := New()
 	b.ResetTimer()
@@ -237,7 +237,7 @@ func BenchmarkInsertComplex(b *testing.B) {
 	}
 }
 
-// Get by _id: full deep-clone of complex JSON out of the store.
+// Get por _id: clonado en profundidad completo del JSON complejo desde el almacén.
 func BenchmarkGetComplexJSON(b *testing.B) {
 	const n = 10000
 	s := seedComplex(b, n)
@@ -249,7 +249,7 @@ func BenchmarkGetComplexJSON(b *testing.B) {
 	}
 }
 
-// Find full page of complex docs (e.g. 20 orders by account) — clone page out.
+// Find de una página completa de documentos complejos (p. ej. 20 pedidos por cuenta) — clonar la página.
 func BenchmarkFindComplexPage20(b *testing.B) {
 	const n = 10000
 	s := seedComplex(b, n)
@@ -267,7 +267,7 @@ func BenchmarkFindComplexPage20(b *testing.B) {
 	}
 }
 
-// Projection: only top-level fields (payload left behind — cheaper path).
+// Proyección: solo campos de primer nivel (se deja atrás la carga útil — camino más barato).
 func BenchmarkFindComplexProjection(b *testing.B) {
 	const n = 10000
 	s := seedComplex(b, n)
@@ -283,7 +283,7 @@ func BenchmarkFindComplexProjection(b *testing.B) {
 	}
 }
 
-// Count of nested path filter (deep walk without returning docs).
+// Count de filtro por ruta anidada (recorrido profundo sin devolver documentos).
 func BenchmarkCountComplexNested(b *testing.B) {
 	const n = 5000
 	s := seedComplex(b, n)
@@ -296,7 +296,7 @@ func BenchmarkCountComplexNested(b *testing.B) {
 	}
 }
 
-// Reopen path: decrypt + JSON unmarshal + rebuild indexes of complex docs.
+// Camino de reapertura: descifrar + deserializar JSON + reconstruir los índices de documentos complejos.
 func BenchmarkReopenComplex10k(b *testing.B) {
 	dir := b.TempDir()
 	opts := Options{
@@ -305,7 +305,7 @@ func BenchmarkReopenComplex10k(b *testing.B) {
 		LightKDF:  true,
 	}
 	path := fmt.Sprintf("%s/complex.mlstore", dir)
-	// Build file once outside the timed loop.
+	// Construir el archivo una vez fuera del bucle cronometrado.
 	{
 		s, err := Open(path, opts)
 		if err != nil {
@@ -326,14 +326,14 @@ func BenchmarkReopenComplex10k(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		if i > 0 {
-			// keep file; Open is read-only until mutation
+			// conservar el archivo; Open es de solo lectura hasta que haya una mutación
 		}
 		b.StartTimer()
 		s, err := Open(path, opts)
 		if err != nil {
 			b.Fatal(err)
 		}
-		// pull a complex doc to prove full nested structure recovered
+		// obtener un documento complejo para demostrar que se recuperó toda la estructura anidada
 		if _, err := s.Get("ml_orders", "42"); err != nil {
 			b.Fatal(err)
 		}

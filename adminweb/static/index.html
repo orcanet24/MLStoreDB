@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLS Admin</title>
+<link rel="stylesheet" href="/app.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+
+<div id="login-view" class="login-wrap hidden">
+  <div class="login-card">
+    <div class="logo">MLS<span>Admin</span></div>
+    <div id="setup-form" class="hidden">
+      <p class="hint" id="setup-text">BD sin proteger. Crea el administrador:</p>
+      <label>Usuario</label>
+      <input id="setup-user" type="text" placeholder="admin">
+      <label>Contraseña</label>
+      <input id="setup-pass" type="password" placeholder="mínimo 6">
+      <button class="btn primary wide" id="setup-btn">Crear administrador</button>
+    </div>
+    <form id="login-form">
+      <label>Base de datos</label>
+      <select id="db-select" style="width:100%;padding:10px;margin-bottom:12px;border-radius:6px;border:1px solid #333;background:#1a1a1a;color:#fff"></select>
+      <button type="button" class="btn ghost small" id="btn-new-db" style="width:100%;margin-bottom:12px">+ Crear nueva BD</button>
+      <label>Usuario</label>
+      <input id="login-user" type="text" autocomplete="username" required>
+      <label>Contraseña</label>
+      <input id="login-pass" type="password" autocomplete="current-password" required>
+      <button type="submit" class="btn primary wide">Entrar</button>
+    </form>
+    <form id="new-db-form" class="hidden">
+      <label>Nombre de la BD</label>
+      <input id="nd-name" type="text" placeholder="miBD">
+      <label>Usuario administrador</label>
+      <input id="nd-user" type="text" placeholder="admin">
+      <label>Contraseña</label>
+      <input id="nd-pass" type="password" placeholder="mínimo 6">
+      <button type="submit" class="btn primary wide">Crear BD y admin</button>
+      <div id="nd-error" class="login-error"></div>
+    </form>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div id="app-view" class="app hidden">
+  <aside class="sidebar">
+    <div class="logo">MLS<span>Admin</span></div>
+    <div class="db-selector">
+      <select id="db-select-app" title="Base de datos"></select>
+    </div>
+    <nav>
+      <a href="#/dashboard">
+        <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-12h8V3h-8v6z"/></svg>
+        <span>Panel</span>
+      </a>
+      <div class="coll-section">
+        <button class="coll-toggle" id="coll-toggle">
+          <svg viewBox="0 0 24 24"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+          <span>Colecciones</span>
+          <b id="coll-count">0</b>
+          <em class="coll-chevron" id="coll-chevron">▸</em>
+          <em class="coll-add" id="coll-add" title="+">+</em>
+        </button>
+        <div class="coll-panel hidden" id="coll-panel">
+          <input id="coll-search" placeholder="Buscar...">
+          <div class="coll-list" id="coll-list"></div>
+        </div>
+      </div>
+      <a href="#/graph">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M6.8 7.6l3.8 8M17.2 7.6l-3.8 8M7.4 6h9.2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <span data-i18n="nav.graph">Grafos</span>
+      </a>
+      <a href="#/console">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 9l3 3-3 3M12 15h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <span data-i18n="nav.console">Consola</span>
+      </a>
+      <a href="#/admin" id="nav-admin" class="hidden">
+        <svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <span data-i18n="nav.admin">Administración</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-box">
+        <button id="lang-btn" class="btn ghost small" title="ES / EN">EN</button>
+        <span id="user-name"></span>
+        <button id="logout-btn" class="btn ghost small" data-i18n="nav.logout">Salir</button>
+      </div>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<div id="modal-backdrop" class="modal-backdrop hidden">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div id="toast-area" class="toast-area"></div>
+
+<script src="/app.js"></script>
+<script src="/graph.js"></script>
+</body>
+</html>

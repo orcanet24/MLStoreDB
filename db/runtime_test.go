@@ -21,11 +21,11 @@ func TestSnapshotCreatesIndependentBackup(t *testing.T) {
 	if err := s.Snapshot(bak); err != nil {
 		t.Fatal(err)
 	}
-	// mutate after snapshot
+	// mutar tras la instantánea
 	_ = s.Insert("q", Document{"_id": "2", "v": "after"})
 	_ = s.Close()
 
-	// backup has only doc 1
+	// el respaldo solo tiene el documento 1
 	b, err := Open(bak, testOpts())
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestSnapshotCreatesIndependentBackup(t *testing.T) {
 		t.Errorf("backup docs: %v", ids(docs))
 	}
 
-	// main has both
+	// el principal tiene ambos
 	m, err := Open(path, testOpts())
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestFileLockBlocksSecondOpen(t *testing.T) {
 		t.Fatalf("want ErrAlreadyOpen, got %v", err)
 	}
 
-	// after close, lock released
+	// tras cerrar, el bloqueo se libera
 	if err := s1.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -90,11 +90,11 @@ func TestAutoFlushPersistsWithinInterval(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = s.Insert("q", Document{"_id": "1", "x": 1})
-	// do NOT call Flush/Close — wait for ticker
+	// NO llamar a Flush/Close — esperar al ticker
 	time.Sleep(defaultAutoFlush + 500*time.Millisecond)
 
-	// open without lock (read side): lock still held by s — use Open not OpenWithLock
-	// Actually s holds lock; read via raw Open is fine (no lock check in Open)
+	// abrir sin bloqueo (lado lector): el bloqueo sigue en manos de s — usar Open, no OpenWithLock.
+	// En realidad s tiene el bloqueo; leer con Open crudo es correcto (Open no comprueba el bloqueo)
 	s2, err := Open(path, testOpts())
 	if err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestCloseReleasesLock(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// lock file may still exist but should be unlocked
+	// el archivo de bloqueo puede seguir existiendo, pero debe estar desbloqueado
 	s2, err := OpenWithLock(path, testOpts())
 	if err != nil {
 		t.Fatal(err)
@@ -135,13 +135,13 @@ func TestAutoFlushStopsOnClose(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// after close, mutating then waiting should NOT auto-write via ticker
-	// (store closed; markDirty still sets flag but ticker stopped)
+	// tras cerrar, mutar y esperar NO debería escribir automáticamente con el ticker
+	// (el almacén está cerrado; markDirty sigue poniendo el flag, pero el ticker está parado)
 	_ = s.Insert("q", Document{"_id": "late"})
 	time.Sleep(defaultAutoFlush + 300*time.Millisecond)
-	// reopen: should not have "late" unless Close flushed (it didn't — insert after close)
-	// Note: Insert after Close still works in memory; ticker is stopped so no flush.
-	// Final state on disk = whatever Close flushed (empty).
+	// reabrir: no debería haber "late" salvo que Close hiciera flush (no lo hizo — insert tras cerrar)
+	// Nota: Insert tras Close sigue funcionando en memoria; el ticker está parado, así que no hay flush.
+	// El estado final en disco = lo que Close dejó grabado (vacío).
 	s2, err := Open(path, testOpts())
 	if err != nil {
 		t.Fatal(err)

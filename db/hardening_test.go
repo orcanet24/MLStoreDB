@@ -27,7 +27,7 @@ func TestRangeSeekIndexedMatchesFullScan(t *testing.T) {
 	}
 	for _, f := range filters {
 		want := fullScanIDs(t, s, "c", f)
-		// indexed
+		// indexado
 		if err := s.EnsureIndex("c", []string{"n"}, false); err != nil {
 			t.Fatal(err)
 		}
@@ -205,7 +205,7 @@ func TestFlushDoesNotLoseConcurrentMutation(t *testing.T) {
 	}
 	_ = s.Insert("q", Document{"_id": "1", "v": "a"})
 
-	// Snapshot as Flush does, then mutate before clearing dirty (the race window).
+	// Tomar la instantánea como hace Flush y luego mutar antes de limpiar dirty (la ventana de carrera).
 	st, err := s.prepareFlush(path, true)
 	if err != nil || st == nil {
 		t.Fatalf("prepareFlush: %v %v", st, err)
@@ -273,7 +273,7 @@ func TestDeepCloneNestedMutation(t *testing.T) {
 	src := Document{"_id": "1", "payload": Document{"tags": []any{"a"}, "obj": map[string]any{"k": 1}}}
 	_ = s.Insert("c", src)
 
-	// mutate caller nested structures
+	// mutar las estructuras anidadas de quien llama
 	p := src["payload"].(Document)
 	p["tags"].([]any)[0] = "MUTATED"
 	p["obj"].(map[string]any)["k"] = 999
@@ -326,7 +326,7 @@ func TestRegexCacheRepeated(t *testing.T) {
 			t.Fatalf("cached regex %d: %v %v", i, docs, err)
 		}
 	}
-	// invalid pattern cached as error → still ErrBadFilter
+	// el patrón inválido se guarda en caché como error → sigue devolviendo ErrBadFilter
 	_, err := s.Find("c", Document{"s": Document{"$regex": "("}}, nil)
 	if !errors.Is(err, ErrBadFilter) {
 		t.Errorf("bad regex: %v", err)
@@ -386,14 +386,14 @@ func TestSensitiveFieldsPersist(t *testing.T) {
 	var buf bytes.Buffer
 	_ = s2.ExportCSV("a", &buf)
 	if strings.Contains(buf.String(), "x") && strings.Contains(buf.String(), "sec") {
-		// value x only appears if column exported — check header
+		// el valor x solo aparece si la columna se exporta — comprobar la cabecera
 		if strings.Contains(strings.SplitN(buf.String(), "\r\n", 2)[0], "sec") {
 			t.Error("sec column exported after reload")
 		}
 	}
 }
 
-// helpers
+// ayudantes
 
 func idKey(i int) string {
 	return string(rune('a'+i%26)) + string(rune('a'+(i/26)%26)) + string(rune('0'+i%10)) + "_" + itoa(i)
@@ -420,8 +420,10 @@ func itoa(i int) string {
 
 func fullScanIDs(t *testing.T, s *Store, coll string, filter Document) []string {
 	t.Helper()
-	// Force semantic baseline: no index path by cloning filter match via Find on empty-index store behavior.
-	// Find always re-matches when not exact; for baseline use Count/Find after ensuring no index.
+	// Forzar la línea base semántica: sin camino de índice, clonando la evaluación del
+	// filtro con el comportamiento de Find en un almacén sin índices. Find siempre vuelve
+	// a evaluar cuando no es exacto; para la línea base se usa Count/Find tras asegurar
+	// que no hay índice.
 	docs, err := s.Find(coll, filter, nil)
 	if err != nil {
 		t.Fatal(err)

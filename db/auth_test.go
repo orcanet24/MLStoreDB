@@ -12,12 +12,12 @@ import (
 func authStore(t *testing.T) *Store {
 	t.Helper()
 	s := New()
-	s.opts.LightKDF = true // fast argon2 for tests
+	s.opts.LightKDF = true // argon2 rápido para los tests
 	return s
 }
 
-// bootstrap creates role admin (rw on *), role reader (r on q with fieldDeny),
-// and users admin/reader. Returns store.
+// bootstrap crea el rol admin (rw sobre *), el rol reader (r sobre q con fieldDeny)
+// y los usuarios admin/reader. Devuelve el store.
 func bootstrap(t *testing.T) *Store {
 	t.Helper()
 	s := authStore(t)
@@ -72,7 +72,7 @@ func TestCreateUserActivatesRBAC(t *testing.T) {
 	if !s.AuthActive() {
 		t.Fatal("first user must activate RBAC")
 	}
-	// raw Store API now denied
+	// la API cruda del Store ahora está denegada
 	if _, err := s.Get("q", "1"); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("Get = %v, want ErrUnauthorized", err)
 	}
@@ -98,7 +98,7 @@ func TestCreateUserActivatesRBAC(t *testing.T) {
 	if err := s.ExportCSV("q", &buf); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("ExportCSV = %v, want ErrUnauthorized", err)
 	}
-	// system colls hidden
+	// colecciones del sistema ocultas
 	for _, n := range s.Collections() {
 		if isSystemColl(n) {
 			t.Errorf("Collections leaked system coll %q", n)
@@ -155,7 +155,7 @@ func TestAuthenticateAndSessionCRUD(t *testing.T) {
 
 func TestSessionReadWithoutWrite(t *testing.T) {
 	s := bootstrap(t)
-	// seed via admin session
+	// sembrar a través de la sesión de admin
 	admin, err := s.Authenticate("root", "secret-admin-1")
 	if err != nil {
 		t.Fatal(err)
@@ -167,14 +167,14 @@ func TestSessionReadWithoutWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// reader has Read on q → Get/Find OK
+	// reader tiene Read sobre q → Get/Find funcionan
 	if _, err := bob.Get("q", "1"); err != nil {
 		t.Errorf("reader Get = %v", err)
 	}
 	if _, err := bob.Find("q", nil, nil); err != nil {
 		t.Errorf("reader Find = %v", err)
 	}
-	// but no Write
+	// pero no Write
 	if err := bob.Insert("q", Document{"_id": "9"}); !errors.Is(err, ErrForbidden) {
 		t.Errorf("reader Insert = %v, want ErrForbidden", err)
 	}
@@ -184,11 +184,11 @@ func TestSessionReadWithoutWrite(t *testing.T) {
 	if err := bob.Delete("q", "1"); !errors.Is(err, ErrForbidden) {
 		t.Errorf("reader Delete = %v, want ErrForbidden", err)
 	}
-	// coll without read perm ("zzz" not in reader's list)
+	// colección sin permiso de lectura ("zzz" no está en la lista de reader)
 	if _, err := bob.Get("zzz", "1"); !errors.Is(err, ErrForbidden) {
 		t.Errorf("reader Get zzz = %v, want ErrForbidden", err)
 	}
-	// reader has write on "other"
+	// reader tiene escritura sobre "other"
 	if err := bob.Insert("other", Document{"_id": "1"}); err != nil {
 		t.Errorf("reader other Insert = %v", err)
 	}
@@ -218,19 +218,19 @@ func TestSessionFieldDeny(t *testing.T) {
 	if _, leaked := docs[0]["salary"]; leaked {
 		t.Error("fieldDeny leaked in Find")
 	}
-	// filters probing denied field → ErrForbidden
+	// los filtros que sondean un campo denegado → ErrForbidden
 	if _, err := bob.Find("q", Document{"salary": Document{"$gt": 1}}, nil); !errors.Is(err, ErrForbidden) {
 		t.Errorf("Find salary probe = %v, want ErrForbidden", err)
 	}
 	if _, err := bob.Count("q", Document{"salary": 1}); !errors.Is(err, ErrForbidden) {
 		t.Errorf("Count salary probe = %v, want ErrForbidden", err)
 	}
-	// nested logical probe
+	// sondeo lógico anidado
 	f := Document{"$or": []any{Document{"salary": 1}, Document{"name": "Ana"}}}
 	if _, err := bob.Find("q", f, nil); !errors.Is(err, ErrForbidden) {
 		t.Errorf("Find $or salary probe = %v, want ErrForbidden", err)
 	}
-	// ExportCSV hides denied field
+	// ExportCSV oculta el campo denegado
 	var buf bytes.Buffer
 	if err := bob.ExportCSV("q", &buf); err != nil {
 		t.Fatal(err)
@@ -241,7 +241,7 @@ func TestSessionFieldDeny(t *testing.T) {
 	if !strings.Contains(buf.String(), "Ana") {
 		t.Error("visible field missing in ExportCSV")
 	}
-	// admin (wildcard, no fieldDeny) sees salary
+	// admin (comodín, sin fieldDeny) ve salary
 	adoc, err := admin.Get("q", "1")
 	if err != nil || adoc["salary"] == nil {
 		t.Errorf("admin should see salary: %v, %v", adoc, err)
@@ -310,14 +310,14 @@ func TestChangePasswordRevokesSessions(t *testing.T) {
 
 func TestSystemCollProtected(t *testing.T) {
 	s := authStore(t)
-	// even with auth off, generic CRUD cannot write system colls
+	// incluso con la autenticación desactivada, el CRUD genérico no puede escribir en colecciones del sistema
 	if err := s.Insert("_users", Document{"_id": "evil"}); !errors.Is(err, ErrForbidden) {
 		t.Errorf("Insert _users = %v, want ErrForbidden", err)
 	}
 	if err := s.Insert("_roles", Document{"_id": "evil"}); !errors.Is(err, ErrForbidden) {
 		t.Errorf("Insert _roles = %v, want ErrForbidden", err)
 	}
-	// with auth on, sessions also can't touch system colls
+	// con la autenticación activa, las sesiones tampoco pueden tocar colecciones del sistema
 	if err := s.CreateRole("admin", []Permission{{Collection: "*", Read: true, Write: true}}); err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestAuthPersistsReopen(t *testing.T) {
 	if doc["ok"] != "show" {
 		t.Errorf("doc = %v", doc)
 	}
-	// Collections still hides system colls
+	// Collections sigue ocultando las colecciones del sistema
 	for _, n := range s2.Collections() {
 		if isSystemColl(n) {
 			t.Errorf("leaked system coll %q", n)

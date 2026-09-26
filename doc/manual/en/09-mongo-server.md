@@ -25,11 +25,14 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -path data.mlstore \
 |---|---|---|
 | `-addr` | `127.0.0.1:28917` | Listen address (MLStoreDB's own port; no clash with a real MongoDB on 27017) |
 | `-path` | *(memory)* | `.mlstore` file |
-| `-db` | file name | Database name clients see |
+| `-db` | file name | Database name clients see; without `-path`, if `<dbdir>/<name>/<name>.mlstore` exists it serves that file |
+| `-web` | off | Web admin console (e.g. `127.0.0.1:28918`) |
+| `-dbdir` | `databases` | Directory of databases discovered/created by the web console |
 | `-key` | — | Master key (required for encrypted files) |
 | `-machine` | default | KEK machine ID |
-| `-user` / `-pass` | — | Enables SCRAM-SHA-256 on the wire |
+| `-user` / `-pass` | — | Enables SCRAM-SHA-256 on the wire (must be an existing database user when the DB has RBAC active) |
 | `-light-kdf` | off | Fast Argon2 (first creation only) |
+| `-reset-auth` | off | Wipes users/roles/sessions without touching data, then exits |
 
 ## Connecting
 
@@ -57,12 +60,19 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -path data.mlstore \
 
 ## Authentication
 
-- Without `-user`: the server requires no auth. If the **engine** has
-  RBAC active (≥1 user), every operation returns `Unauthorized` — in
-  that case configure `-user`/`-pass` with an engine user.
-- With `-user`: the wire requires SCRAM-SHA-256. After authenticating,
-  if the engine has RBAC active, an engine `Session` is created for that
-  user (permissions and `fieldDeny` apply just like from Go).
+- Without `-user`: no wire auth. Clients connecting without credentials work
+  (unless the **engine** has RBAC active, ≥1 user: then every operation returns
+  `Unauthorized`). A client that *tries* to authenticate gets `Authentication
+  failed` — shown by Compass/Navicat/mongosh as *invalid credentials* — and the
+  server logs it, stating that `-user`/`-pass` is missing.
+- With `-user`: the wire requires SCRAM-SHA-256. After authenticating, if the
+  engine has RBAC active, an engine `Session` is created for that user
+  (permissions and `fieldDeny` apply just like from Go): `-user`/`-pass` must be
+  an **existing database user** (`_users`, web console → Users), not a separate
+  credential.
+- Startup diagnostics: the server prints which store the wire serves, which
+  `-dbdir` databases are web-console-only (and how to serve them: `-db <name>`),
+  and whether `-user` exists in the database (listing valid users).
 
 ## Subset specifics
 

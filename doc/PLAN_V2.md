@@ -3,6 +3,22 @@
 Plan maestro ejecutado fase por fase. Cada fase se cierra solo con todos sus
 gates en verde; no se avanza a la siguiente con fases abiertas.
 
+## Reglas de la bitácora (obligatorias desde M9x)
+
+1. **Toda** modificación de código con impacto en API, formato de archivo o UI
+   se registra aquí **el mismo día**, con los gates corridos.
+2. Gates obligatorios: `go build ./...` · `go vet ./...` ·
+   `go test ./... -count=1` · `gofmt -l` vacío · smoke · benchmarks si se tocan
+   rutas calientes · `scripts/test-race.ps1` (db + wire + adminweb).
+3. Nada se marca ✅ sin haber corrido los gates; el número de tests PASS debe
+   coincidir con esta bitácora (actual: **233** = db 181 + wire 28 + adminweb 24).
+4. Una fase a medias se marca 🔨 con la lista exacta de lo que falta; una fase
+   abandonada se marca ❌ con su motivo. Prohibido dejarla ✅.
+5. Los docs (`README.md`, `doc/*`, manual) se sincronizan en el mismo cambio
+   que el código que describen.
+6. Los cambios "sobre la marcha" (quick fixes, refactors durante otra tarea)
+   se anotan en una sub-sección **Cambios sobre la marcha** de la fase activa.
+
 ## Decisiones cerradas (con el usuario)
 
 | Decisión | Elección |
@@ -40,7 +56,9 @@ gates en verde; no se avanza a la siguiente con fases abiertas.
 | M6 Grafo (edges + traverse) | ✅ | `go build` · `go vet` · 167 PASS / 0 FAIL (8 nuevos graph) · smoke OK · loadtest PASS · `-race` verde |
 | M7 Docs + benchmarks + race final | ✅ | `go build` · `go vet` · 167 PASS / 0 FAIL · smoke OK · loadtest PASS · benchmarks 11 OK · `-race` verde · docs `doc/*` actualizados |
 | M8 Wire protocol Mongo-compatible | ✅ | `go build` · `go vet` · 201 PASS / 0 FAIL (28 nuevos wire + 6 motor) · smoke OK · loadtest PASS · `-race` verde (db+wire) · e2e mls-server OK · manual ES/EN |
-| M9 (post-plano) Consola web: administración + grafos (phpMyAdmin + Neo4j Browser) | ⬜ pendiente de aprobación | |
+| M9 Consola web: administración + grafos (phpMyAdmin + Neo4j Browser) | ✅ | `go build` · `go vet` · gates M9 final (ver M9x): 233 PASS / 0 FAIL · -race verde (db+wire+adminweb) · import pipeline 36k@53k/s · manual ES/EN + HTML |
+| M9x Auditoría integral docs↔código + restauración de la UI | ✅ | gates M9x 2026-09-26: 233 PASS / 0 FAIL · gofmt limpio · e2e de navegador real · bugs A4–A9 corregidos (ver sección M9x) |
+| M10 (post-plan) Escalabilidad masiva: index paging + checkpoint .vtp + reindex + grafos dinámicos | ⬜ propuesto | |
 
 ---
 
@@ -547,49 +565,125 @@ completa + race.
 
 ---
 
-## M9 — Consola web: administración + grafos (pendiente)
+## M9 — Consola web: administración + grafos (completado)
 
-**Idea:** una consola web profesional embebida que combine lo mejor de
-**phpMyAdmin** (administrar la BD completa desde el navegador) y del
-**Neo4j Browser** (explorar y construir grafos en un canvas interactivo),
-sin escribir una línea de Go.
+**Marco de trabajo aprobado y ejecutado completo (2026-09-24):** UI sobria,
+moderna y fresca; tipografía system-ui; muy intuitiva. Consola estilo
+phpMyAdmin con control de usuarios/roles/accesos (cuando RBAC activo);
+import/export CSV+JSON; crear colecciones; CRUD; triggers por colección; y
+canvas de grafos estilo Neo4j (datos conectados como esferas/globos
+interconectados).
 
-**Alcance previsto — consola de administración (estilo phpMyAdmin):**
+**Alcance completo definido:**
 
-- Colecciones: listar, crear, borrar, ver/crear índices.
-- Documentos: explorar con paginación/filtros/sort, editor JSON, CRUD
-  completo, export CSV.
-- Seguridad RBAC (M4): usuarios, roles, permisos y `fieldDeny` gestionables
-  desde la UI.
-- Triggers (M5b): listar, crear, editar, habilitar/deshabilitar.
-- Stats del motor: `CacheStats`, counts, tamaño de archivo, sesiones.
+- Consola de administración: colecciones, docs (paginación/filtros/sort,
+  editor JSON), índices, import/export CSV+JSON, triggers, usuarios/roles,
+  stats del motor.
+- Canvas de grafos: nodos = docs, aristas = `edges.<tipo>`; drag/zoom/pan;
+  **crear conexiones arrastrando**; expandir vecinos; `Traverse` y
+  `ShortestPath` resaltados; agrupación visual; consola de consultas con
+  resultado tabla o grafo.
+- Servidor HTTP propio embebido (`go:embed`, sin node ni CDN); auth vía
+  RBAC del motor; ES/EN.
 
-**Alcance previsto — canvas de grafos (estilo Neo4j Browser):**
+**Idea:** consola web embebida estilo **phpMyAdmin** (administrar la BD
+completa) + **Neo4j Browser** (canvas interactivo de grafos), servida
+desde el propio binario (`go:embed`, sin node ni CDN), conectada al RBAC
+del motor. Marco de trabajo definido y aprobado con el usuario: UI
+sobria/moderna/fresca, tipografía system-ui, ES/EN.
 
-- Nodos = documentos, aristas = `edges.<tipo>`; render interactivo con
-  drag, zoom y pan.
-- **Crear conexiones arrastrando** de un nodo a otro en el canvas →
-  `AddEdge` (tipo + props en el momento).
-- Exploración incremental: expandir vecinos (`Neighbors`), recorridos BFS
-  (`Traverse`) y rutas más cortas (`ShortestPath`) resaltados en el grafo.
-- **Agrupación visual de grafos**: por colección, tipo de arista o
-  propiedad (clusters/fold).
-- Panel de consultas: consultas documentales y de grafo con resultados
-  como tabla **o** como grafo.
+**Arquitectura:** package `adminweb/` (5 Go prod + 2 test + 4 assets
+estáticos embebidos) integrado en `mls-server` vía flag
+`-web 127.0.0.1:28918`. SPA vanilla JS con hash-router, i18n ES/EN,
+tema oscuro. Auth: setup de primer usuario (crea rol `admin` wildcard) →
+login → cookie HttpOnly/SameSite=Strict + **CSRF** en toda mutación +
+**rate-limit** (5 intentos/min por IP). Cada endpoint pasa por la
+`Session` del motor (permisos y fieldDeny se respetan solos). Headers:
+CSP, X-Frame-Options DENY, nosniff. Assets con MIME explícito (fix del
+bug de registro de Windows que servía `application/x-css` y el navegador
+bloqueaba estilos con nosniff).
 
-**Decisiones técnicas previstas (se cierran al arrancar M9):**
+### M9a — Servidor + auth + dashboard + CRUD docs (completado)
 
-- Servidor HTTP propio embebido en Go (no depende del wire protocol M8;
-  pueden convivir en el mismo binario).
-- UI servida como assets estáticos embebidos en el binario (sin build de
-  node, sin CDN externo).
-- Auth vía RBAC existente (`Authenticate` → `Session`, cookie/token).
+- `adminweb/server.go` (242 L): Server, middleware (panic-recovery,
+  security headers, timeouts), router ServeMux, `Handler()` testeable.
+- `adminweb/auth.go` (207 L): setup/login/logout/me, registro de
+  sesiones web (token→`*db.Session`, el motor valida expiración/revocación
+  por operación), rate-limit, cookies.
+- `adminweb/api.go` (201 L): stats (dashboard: colecciones, docs, tamaño
+  archivo vía nuevo `Store.Path()`, CacheStats), colecciones
+  (list/crear/eliminar), docs (browse paginado con filtro JSON + sort,
+  get/insert/reemplazar/eliminar).
+- UI: login/setup, sidebar, dashboard con stat cards, tabla de documentos
+  con columnas dinámicas, editor JSON con validación, modales, toasts.
+- Tests: setup+login, rate-limit 429, CSRF 403, colecciones, docs CRUD,
+  permisos read-only, headers, stats → 8 tests.
 
-**Dependencia:** ninguna dura de M8; se ejecuta tras cerrar M8 para no
-abrir dos frentes de red simultáneos.
+### M9b — Import/Export + índices + triggers (completado)
 
-**Registrado:** 2026-09-23 (visión ampliada a pedido del usuario:
-administrar la BD + CRUD + agrupar grafos + canvas de conexiones).
+- `adminweb/io.go` (401 L): export **CSV** (BOM, columnas top-level,
+  filtro opcional) / **JSON** / **NDJSON** streaming; import de los tres
+  formatos con **preview** antes de confirmar, modos insert/upsert,
+  reporte de errores por fila, inferencia de tipos en CSV (`_id` siempre
+  string); índices (list/crear/eliminar); triggers (list/upsert con
+  toggle de `enabled` vía delete+recreate, delete) con chequeo
+  `CanWrite` sobre la colección objetivo (nuevos `Session.CanWrite`/
+  `CanRead` en el motor).
+- UI: pestañas por colección (Documentos · Índices · Importar/Exportar),
+  gestor de triggers con editor completo (evento, colección, filtro,
+  acciones JSON) y tarjetas con toggle/eliminar.
+- Tests: índices (unique 409), export 3 formatos + filtro, import
+  CSV/JSON/NDJSON + upsert + errores por fila, triggers (fire real con
+  `$get`, disable, delete), permisos de triggers → 5 tests.
+
+### M9c — Canvas de grafos (completado)
+
+- `adminweb/graph.go` (221 L): 7 endpoints — meta (tipos de arista +
+  colecciones vértice), neighbors (aristas from/to con props), resolve
+  (ids → docs buscando en colecciones), edge create/delete, traverse
+  (BFS con dir/min/max/limit), path (shortest). Nuevo
+  `Session.RemoveEdge` en el motor (RBAC sobre `edges.<tipo>`).
+- `adminweb/static/graph.js` (~470 L): canvas 2D con **física de
+  fuerzas** (repulsión + resortes + gravedad, alpha-decay) — esferas
+  coloreadas por colección, aristas con flecha coloreadas por tipo.
+  Interacciones: buscar vértice por `_id`, **doble clic = expandir
+  vecinos**, **Shift+arrastrar entre nodos = crear arista** (diálogo
+  tipo+props), clic = panel lateral (JSON del doc, expandir, conectar,
+  eliminar doc, aristas con eliminar), pan/zoom, **Traverse BFS** con
+  profundidad, **Ruta más corta** A→B resaltada, **agrupar por
+  colección** (clusters), leyenda, límite 400 nodos.
+- Tests: meta+edge create, neighbors+resolve, traverse+path, edge
+  delete+permisos read-only → 4 tests.
+
+### M9d — Usuarios/roles + consola + i18n (completado el 2026-09-25, documentado el 2026-09-26)
+
+> Hallazgo A1 de la auditoría M9x: esta fase estaba **implementada en el
+> backend** (`adminweb/users.go` + `users_test.go` + `load_test.go`) y marcada
+> aquí como pendiente. El backend quedó completo con 8 endpoints
+> (usuarios/roles CRUD, guard admin-only por `CanWrite("*")`, consola de
+> consultas `/api/query`). La **UI** correspondiente se perdió en el rewrite
+> multi-BD y se restauró en M9x-R1.
+
+Endpoints: `GET/POST/PUT /api/users`, `DELETE /api/users/{username}` ·
+`GET/POST/PUT /api/roles`, `DELETE /api/roles/{name}` · `POST /api/query`.
+APIs de motor usadas: `ListUsers`/`ListRoles`/`DeleteUser`/`DeleteRole`/
+`CreateUser`/`CreateRole` (+ `SetUserRoles` añadida en M9x, ver A4).
+
+### M9e — Documentación (completado 2026-09-26)
+
+Bitácora + README/DISTRIBUCION/PRUEBAS/API/doc-README sincronizados con el
+estado real final (M9a–M9d + M9x) en la auditoría M9x, incluyendo el informe
+datado `doc/INFORME_AUDITORIA.md`.
+
+**Estado del package `adminweb` (post-M9x):** 7 Go prod (2.296 L: server 366
++ auth 232 + api 215 + io 709 + graph 231 + users 201 + multiserver 342)
++ 4 test (~1.550 L) + 4 assets (2.204 L: index.html 104 · app.css 556 ·
+app.js 936 · graph.js 608).
+**Tests: 24** (adminweb_test 14 · users_test 4 · graph_test 4 · load_test 2).
+
+**Gates M9 (histórico a+b+c, consolidado en M9x):** ver sección M9x. Al cierre
+de M9c la suite real era 218 PASS; el número 224 que apareció después en esta
+bitácora nunca llegó a correrse como gate — fue uno de los hallazgos (A10).
 
 ---
 
@@ -666,3 +760,149 @@ updates; `maxBsonObjectSize` = 1 MB.
 - `go run ./tools/loadtest` → PASS end-to-end ✅
 - `powershell -File scripts/test-race.ps1` → **ok (db + wire)** ✅
 - e2e `mls-server` por TCP real (hello + ping) ✅
+
+**Gates M9 (final, consolidado con M9x el 2026-09-26):**
+
+- `go build ./...` ✅ · `go vet ./...` ✅ · `gofmt -l` vacío ✅
+- `go test ./... -count=1` → **233 PASS / 0 FAIL** (db 181 + wire 28 + adminweb 24) ✅
+- JS validado (`node --check` app.js + graph.js) ✅
+- import pipeline carga: **36,000 docs en ~675 ms (53k docs/seg)** con workers = GOMAXPROCS, lotes de 100, backpressure por canal acotado (test `TestImportPipelineLarge`) ✅
+- paginación browse (25 docs/página, nunca carga todo) ✅
+- `powershell -File scripts/test-race.ps1` → **ok (db + wire + adminweb)** ✅
+- e2e de navegador real contra `mls-server -web`: ver gates M9x ✅
+
+---
+
+## M9x — Auditoría integral docs ↔ código (2026-09-26, completado)
+
+**Motivo:** pedido del usuario — comparar toda la documentación contra el
+código real; hubo cambios sobre la marcha no documentados y trabajos que
+quedaron a medias. Alcance: leer todos los `doc/*` + manual, inventariar el
+código, correr los gates, arreglar lo roto, restaurar lo perdido y dejar esta
+bitácora como fuente única de verdad. Informe completo datado:
+`doc/INFORME_AUDITORIA.md`.
+
+### Hallazgos (docs vs código)
+
+| # | Hallazgo | Impacto | Acción |
+|---|---|---|---|
+| A1 | M9d (usuarios/roles + query console) estaba **hecho en el backend** con tests, pero la bitácora lo marcaba "pendiente" | docs desactualizados | documentado (M9d arriba) |
+| A2 | **`adminweb/multiserver.go` (multi-BD) no existía en ningún doc**: rutas `/api/db/{name}/…`, crear BDs por web (`POST /api/databases`), `-dbdir`, cookie/sesión por BD | feature invisible | documentado aquí y en DISTRIBUCION/README |
+| A3 | La UI fue **reescrita** para multi-BD y perdió: índices, import/export, triggers, canvas de grafos (`graph.js` existía pero no se cargaba), usuarios/roles e i18n | regresión funcional | UI restaurada completa (M9x-R1) |
+| A4 | `PUT /api/users` reseteaba la **contraseña a `"placeholder1"`** al cambiar roles (delete+create) | **bug de seguridad** | nueva API `Store.SetUserRoles` (in-place, preserva el hash) + `db/setroles_test.go` con regresión |
+| A5 | `forwardRequest` (multi-BD) **perdía el query string** → export ignoraba `format`, import ignoraba `format/mode`, browse/graph rotos vía proxy | bug P1 | query preservado en el forward |
+| A6 | `forwardRequest` usaba `io.Pipe`: al retornar el handler exterior net/http cierra el body → **race que cortaba el import asíncrono** (job a 0 insertados) | bug P1 | body bufferizado acotado (512 MiB) antes del forward |
+| A7 | El forward no anteponía `/api` → `/api/db/{name}/setup` y otras mutaciones daban **405** (y los GET caían al index.html con 200 falso) | bug P1 | subpath = `/api` + rest |
+| A8 | Tabs de la UI con `onclick` inline → **bloqueadas por la CSP propia** (`script-src 'self'`) | bug P2 | listeners bindados (CSP-compliant) |
+| A9 | `graph.js` leía `nd.Vertex` pero la API serializa `vertex` (tag JSON) → highlight de traverse no funcionaba; además hacía **dos llamadas** al traverse | bug P2 | corregido + una sola llamada + cleanup del listener de resize |
+| A10 | 23 archivos sin `gofmt` canónico; conteo de tests divergente en docs (218 / 224 / 225 vs real); bloque duplicado "Gates M9" | higiene | `gofmt -w` + números reales + bloques consolidados |
+
+**Cambios sobre la marcha que estaban bien y solo faltaban registrar:**
+`Store.Path()`, `Store.ListUsers/ListRoles/DeleteUser/DeleteRole`,
+`Store.ResetAuth` (H10, `-reset-auth`), `Session.CanRead/CanWrite`, import
+asíncrono con jobs (`/api/import/{id}` + workers = GOMAXPROCS + lotes de 100),
+paginación de browse, UI y server multi-BD, `adminweb/static` reescrito.
+Inventario real de `tools/`: 3 (smoke, loadtest, mls-server); `backup/` vacío;
+`a.txt` era un stub vacío → eliminado.
+
+### M9x-R1 — Restauración de la UI completa
+
+`app.js` reescrito (936 L) con **i18n ES/EN persistente** (`localStorage`,
+~190 claves ×2), rutas `#/dashboard` · `#/collections` · `#/coll/{name}` con
+tabs `docs`/`indexes`/`io`/`triggers` · `#/graph` · `#/console` · `#/admin`:
+
+- Documentos: filtro JSON, sort por columna, paginación, editor JSON, delete
+  con confirmación modal.
+- Índices: crear (compound, unique) / listar / eliminar.
+- Import/Export: export JSON/NDJSON/CSV (descarga) + import por archivo con
+  **job asíncrono y barra de progreso** (poll `/api/import/{id}`).
+- Triggers: crear/editar/toggle/eliminar (filtro + acciones JSON + `$get`).
+- Grafos: `graph.js` vuelto a cargar — buscador por `_id`, expandir vecinos,
+  conectar (Shift+drag), Traverse BFS, ruta más corta, agrupar, leyenda.
+- Administración: usuarios (crear, editar roles, eliminar) y roles (matriz
+  read/write/fieldDeny) con guard admin-only.
+
+`index.html` (104 L): nav Grafos + Administración, selector ES/EN, `<script
+src="/graph.js">`. Motor: `Store.SetUserRoles` + test.
+
+### M9x-R2 — Correcciones multi-BD
+
+- `forwardRequest`: buffer del body + query string preservado (A5, A6).
+- `handleAll`: subpath con prefijo `/api` (A7).
+- UI: `apiUrl()` prefija `/api/db/{name}` en todas las llamadas (incluido
+  `/api/status` de login); sesión multi-BD restaurada vía `localStorage.mls-db`.
+
+### Gates M9x (2026-09-26)
+
+- `go build ./...` ✅ · `go vet ./...` ✅ · `gofmt -l` vacío ✅
+- `go test ./... -count=1` → **233 PASS / 0 FAIL** (db 181 + wire 28 + adminweb 24) ✅
+- `go run ./tools/smoke` → `smoke OK: Ana` ✅
+- `go test ./db -bench=. -benchtime=1x -run=XXX` → 11 benchmarks OK (i5-2430M:
+  Insert10k 0.74 ms · FindFullScan 10.1 ms · FindIndexed 8.0 ms · Flush10k 4.9 s ·
+  ExportCSV 174 ms · InsertComplex 0.20 ms · GetComplex 32 µs · Page20 2.4 ms ·
+  Projection 9.4 ms · Count 3.8 ms · Reopen10k 95 ms LightKDF) ✅
+- `scripts/test-race.ps1` → **ok (db + wire + adminweb)** ✅
+- e2e vivo (navegador real contra `mls-server -web`): login multi-BD →
+  crear BD `demobd` con admin → colección `clientes` → insert c1/c2 → índice
+  `ciudad` creado y listado → trigger `audit_cli` creado y **dispara de verdad**
+  (`audit` recibe `{ref: "c2"}` vía `$get`) → export CSV correcto (header
+  `_id,ciudad,nombre,total`) + import JSON asíncrono inserta c3/c4 →
+  usuarios/roles: rol `lector` (read-only), usuario `visor`, cambio de roles
+  `lector→[lector,admin]` **preservando la password** (regresión A4:
+  `visor123` entra, `placeholder1` → 401) → grafo: aristas `refiere` c1→c2→c3,
+  traverse BFS = `[c1,c2,c3]`, canvas: buscar `c1` + expandir = **2 nodos · 1
+  arista** con leyenda ✅
+- `node --check` app.js + graph.js ✅
+
+**Estado del módulo tras M9x:** prod 15.889 L Go (db 8.328 + wire 4.580 +
+adminweb 2.296 + tools 685 incl. `tools/tmp_inspect`, utilidad de diagnóstico
+que imprime usuarios/roles de una BD sin exponer hashes) + assets 2.204 L;
+tests 8.020 L, **233 PASS / 0 FAIL**, `-race` verde en los 3 paquetes.
+
+---
+
+## M10 — Escalabilidad masiva (propuesto, pendiente)
+
+**Objetivo:** soportar millones de registros sin colapsar RAM ni el tiempo
+de rebuild al abrir la BD. Lo que hoy existe funciona para ~cientos de miles;
+M10 lleva el motor a escala industrial.
+
+**Componentes propuestos:**
+
+1. **Index paging en RAM (index windowing / spill-to-disk):** el CSR no
+   carga en RAM una sola estructura gigante; se pagina en ventanas LRU.
+   Las seeks consultan la página caliente o la leen de disco. El seek
+   Range/Sort mantiene O(log pages) en vez de requiring todo el índice
+   residente. Técnicamente: **"buffered index access"** o
+   **"memory-mapped index pages"**.
+
+2. **Checkpoint / snapshot file (.vtp):** al cerrar graceful, vuelca todos
+   los índices + metadata a un archivo binario compacto (checksum por
+   bloque). Al abrir, en vez de escanear todo el log de registros (lento
+   en millones), carga el checkpoint + solo reproduce los registros
+   posteriores al último checkpoint. Técnicamente: **"WAL checkpoint"**
+   (SQLite/MongoDB) o **"index dump + incremental replay"**. Formato
+   propuesto: `bd.mlstore.vtp` binario con header + bloques CSR
+   comprimidos + CRC por bloque.
+
+3. **Reindex job:** reconstruye los índices desde cero y reescribe el
+   IDX/CHECKPOINT, eliminación de fragmentación tras millones de
+   mutaciones. Puede correr en background sin bloquear lecturas.
+
+4. **Compactación del log:** tras millones de DOC/DEL, el log de records
+   se llena de muertos. Un job de compactación reescribe solo los docs
+   vivos + índices, truncando el archivo.
+
+5. **Grafos dinámicos (similitud):** unión manual por campo + unión
+   automática por similitud de coseno con umbral configurable.
+   Embedding simple en Go (n-gramas de caracteres + vectores TF-IDF)
+   para casos: vendedor→producto/marca→otros vendedores, teléfono
+   compartido entre documentos. Técnicamente: **record linkage /
+   fuzzy matching / cosine similarity sobre n-gramas**. Sin dependencias
+   externas (embedding liviano, no semántico).
+
+**Dependencias:** ninguna de M9. Ejecución post-M9 para no abrir dos
+frentes de red/estructura simultáneos.
+
+**Registrado:** 2026-09-25, por pedido del usuario (cargas de millones de
+registros, checkpoints de índices, grafos dinámicos).

@@ -8,7 +8,7 @@ import (
 	"sort"
 )
 
-// sensitiveFields are never exported to CSV (DESIGN §7.1 / análisis D1).
+// sensitiveFields nunca se exportan a CSV (DESIGN §7.1 / análisis D1).
 var sensitiveFields = map[string]bool{
 	"access_token":  true,
 	"refresh_token": true,
@@ -25,8 +25,8 @@ var sensitiveFields = map[string]bool{
 	"private_key":   true,
 }
 
-// SetSensitiveFields declares extra CSV-hidden fields for one collection
-// (union with the global blacklist). Replaces any previous list.
+// SetSensitiveFields declara campos adicionales ocultos en el CSV para una colección
+// (unión con la lista negra global). Reemplaza cualquier lista anterior.
 func (s *Store) SetSensitiveFields(coll string, fields []string) {
 	s.setSensitiveFields(coll, fields)
 	_ = s.afterMutation()
@@ -40,7 +40,7 @@ func (s *Store) setSensitiveFields(coll string, fields []string) {
 	s.markDirty()
 }
 
-// SensitiveFields returns the collection-specific sensitive field list.
+// SensitiveFields devuelve la lista de campos sensibles propia de la colección.
 func (s *Store) SensitiveFields(coll string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -51,10 +51,11 @@ func (s *Store) SensitiveFields(coll string) []string {
 	return append([]string{}, c.sensitive...)
 }
 
-// ExportCSV writes one row per doc; columns = union of top-level keys
-// (first seen order from sorted docs scan is replaced by sorted keys for stability,
-// but _id is always first). UTF-8 BOM for Excel. Sensitive fields omitted (R8).
-// When ≥1 user exists (M4), raw Store export returns ErrUnauthorized.
+// ExportCSV escribe una fila por documento; las columnas son la unión de las claves
+// de primer nivel (el orden de aparición del recorrido ordenado se sustituye por claves
+// ordenadas para mayor estabilidad, pero _id va siempre primero). BOM UTF-8 para Excel.
+// Los campos sensibles se omiten (R8).
+// Cuando existe al menos 1 usuario (M4), la exportación cruda del Store devuelve ErrUnauthorized.
 func (s *Store) ExportCSV(coll string, w io.Writer) error {
 	return s.exportCSV(nil, coll, w)
 }
@@ -76,7 +77,7 @@ func (s *Store) exportCSV(sess *Session, coll string, w io.Writer) error {
 	}
 	c, ok := s.collRO(coll)
 	if !ok {
-		// empty export with just _id header
+		// exportación vacía con solo la cabecera _id
 		_, err := io.WriteString(w, "\xEF\xBB\xBF_id\r\n")
 		return err
 	}
@@ -90,7 +91,7 @@ func (s *Store) exportCSV(sess *Session, coll string, w io.Writer) error {
 	}
 	sort.Strings(ids)
 
-	// Materialize docs (may load cold entries) and collect columns.
+	// Materializar los documentos (puede cargar entradas frías) y recoger las columnas.
 	docs := make([]Document, len(ids))
 	for i, id := range ids {
 		doc, err := s.resident(c, id)
@@ -100,7 +101,7 @@ func (s *Store) exportCSV(sess *Session, coll string, w io.Writer) error {
 		docs[i] = doc
 	}
 
-	// column set: _id first, then remaining top-level keys sorted
+	// conjunto de columnas: _id primero y luego el resto de claves de primer nivel ordenadas
 	colSet := map[string]bool{"_id": true}
 	var extra []string
 	for _, doc := range docs {
@@ -118,7 +119,7 @@ func (s *Store) exportCSV(sess *Session, coll string, w io.Writer) error {
 	sort.Strings(extra)
 	cols := append([]string{"_id"}, extra...)
 
-	// UTF-8 BOM
+	// BOM UTF-8
 	if _, err := io.WriteString(w, "\xEF\xBB\xBF"); err != nil {
 		return err
 	}
@@ -159,7 +160,7 @@ func csvValue(v any) string {
 		}
 		return "false"
 	case float64:
-		// avoid 42 for 42.0 when integral
+		// evita 42 en lugar de 42.0 cuando es un entero
 		if t == float64(int64(t)) {
 			return fmt.Sprintf("%d", int64(t))
 		}
@@ -169,7 +170,7 @@ func csvValue(v any) string {
 	case int64:
 		return fmt.Sprintf("%d", t)
 	default:
-		// nested / arrays → JSON string (RFC 4180 via csv.Writer quoting)
+		// anidados / arrays → string JSON (RFC 4180 mediante el entrecomillado de csv.Writer)
 		b, err := json.Marshal(t)
 		if err != nil {
 			return fmt.Sprintf("%v", t)
@@ -178,16 +179,16 @@ func csvValue(v any) string {
 	}
 }
 
-// Migration is a forward-only schema change (DESIGN §7.2).
+// Migration es un cambio de esquema solo hacia adelante (DESIGN §7.2).
 type Migration struct {
 	Version uint64
 	Name    string
 	Up      func(s *Store) error
 }
 
-// ApplyMigrations runs pending migrations in order and persists schema_version.
-// A store with newer schema_version than the last migration is rejected
-// ("update the program"). Snapshot before migrate is the binary's job.
+// ApplyMigrations ejecuta las migraciones pendientes en orden y persiste schema_version.
+// Un almacén con una schema_version más nueva que la última migración se rechaza
+// ("actualiza el programa"). Hacer una instantánea antes de migrar es cosa del binario.
 func (s *Store) ApplyMigrations(migs []Migration) error {
 	if err := s.applyMigrations(migs); err != nil {
 		return err
@@ -199,7 +200,7 @@ func (s *Store) applyMigrations(migs []Migration) error {
 	if len(migs) == 0 {
 		return nil
 	}
-	// sort by version
+	// ordenar por versión
 	sorted := append([]Migration(nil), migs...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Version < sorted[j].Version })
 
@@ -221,9 +222,10 @@ func (s *Store) applyMigrations(migs []Migration) error {
 		if m.Version <= current {
 			continue
 		}
-		// Run Up outside holding... we hold lock; Up may call Store methods that Lock → deadlock.
-		// Document: Up must not call locked Store methods, OR we release lock per migration.
-		// Safer: release lock for Up, re-acquire to bump version.
+		// Ejecutar Up fuera del bloqueo... tenemos el lock tomado; Up puede llamar a métodos del
+		// Store que bloquean → deadlock. Documentado: Up no debe llamar a métodos bloqueantes del
+		// Store, O se libera el lock en cada migración.
+		// Más seguro: liberar el lock para Up y volver a tomarlo para subir la versión.
 		s.mu.Unlock()
 		err := m.Up(s)
 		s.mu.Lock()

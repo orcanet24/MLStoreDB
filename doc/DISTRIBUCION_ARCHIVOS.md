@@ -11,13 +11,19 @@ mlstoredb/                   # module mlstoredb (go 1.26.5)
 │   ├── bson.go · msg.go · cursor.go · server.go · handshake.go
 │   ├── commands.go · query.go · update.go · agg.go · scram.go
 │   └── wire_test.go
+├── adminweb/                # ← M9/M9x: consola web de administración (7 Go + 4 assets)
+│   ├── server.go · auth.go · api.go · io.go · graph.go
+│   ├── users.go (M9d) · multiserver.go (multi-BD, M9x)
+│   ├── adminweb_test.go · graph_test.go · users_test.go · load_test.go
+│   └── static/ (index.html 104 · app.css 556 · app.js 936 · graph.js 608)
 ├── tools/
 │   ├── smoke/main.go        # smoke: open → index → insert → find → close
 │   ├── loadtest/main.go     # prueba de carga 10k (disco + cifrado)
-│   └── mls-server/main.go   # M8: servidor Mongo-compatible (CLI)
+│   └── mls-server/main.go   # M8/M9: servidor Mongo-compatible + consola web (-web)
 ├── scripts/
 │   └── test-race.ps1        # -race con CGO + gcc MSYS2 (db + wire)
-└── doc/                     # ← ESTA documentación (aislada de ML)
+├── iniciar-servidor.bat     # launcher interactivo: multi-BD en databases\<nombre>\
+└── doc/                     # ← ESTA documentación (aislada del proyecto origen)
     ├── README.md · ARQUITECTURA.md · API.md · CONSULTAS.md
     ├── FORMATO_ARCHIVO.md · PRUEBAS.md · RECREAR.md
     ├── PLAN_V2.md           # bitácora plan v2 (M0→M9)
@@ -106,8 +112,35 @@ roundtrip, handshake OP_MSG/legado, CRUD completo, cursores, aggregate,
 índices admin, errores/writeErrors, proyecciones, find legado + getMore,
 secuencias kind-1, checksum, SCRAM ok/fail, RBAC, edges por wire.
 
-**Total wire: 11 archivos · ~5.323 líneas**
-**Total módulo: 52 archivos .go en packages · ~18.230 líneas (+ tools/)**
+### 2.4 Package `adminweb` (M9 + M9x) — 7 archivos Go + 4 assets
+
+**Producción (7 archivos, 2.296 líneas):**
+
+| Archivo | Líneas | Responsabilidad |
+|---|---:|---|
+| **io.go** | 709 | Import/export CSV/JSON/NDJSON (preview, jobs asíncronos con barra de progreso, upsert, errores por fila), índices, triggers (CanWrite) |
+| **server.go** | 366 | Server, middleware (panic/headers/timeouts/CSP), router, assets embebidos con MIME explícito, jobs de import |
+| **multiserver.go** | 342 | **Multi-BD** (M9x): `MultiServer`, crear/listar BDs, forward con body bufferizado + query preservado, descubrimiento por `-dbdir` |
+| **graph.go** | 231 | API de grafos: meta, neighbors, resolve, edge create/delete, traverse, path |
+| **auth.go** | 232 | Setup primer usuario, login/logout, sesiones web, CSRF, rate-limit, `/api/me` |
+| **api.go** | 215 | Stats (dashboard), colecciones CRUD, browse/docs (filtro/sort/paginación) |
+| **users.go** | 201 | Usuarios (list/create/**update roles in-place**/delete), roles (CRUD), consola de consultas `/api/query` |
+
+**Assets estáticos embebidos (`static/`, 2.204 líneas):** `index.html`
+(104: shell SPA + nav Grafos/Administración + selector ES/EN), `app.css`
+(556: design system oscuro), `app.js` (936: i18n ES/EN persistente,
+tabs docs/índices/io/triggers, consola, admin, restauración de sesión
+multi-BD), `graph.js` (608: canvas de grafos con física de fuerzas,
+expandir, Shift+drag para aristas, Traverse, rutas, agrupación).
+
+**Tests (4 archivos, 1.081 líneas) — 24 PASS:** `adminweb_test.go` (14:
+setup/login, rate-limit, CSRF, auth requerida, colecciones, docs, permisos,
+headers, stats, índices, export, import, triggers, permisos triggers) ·
+`users_test.go` (4: usuarios/roles, admin-only, query console, lista vacía) ·
+`graph_test.go` (4) · `load_test.go` (2: pipeline 36k, paginación).
+
+**Total adminweb: 7 Go + 4 assets · ~5.581 líneas**
+**Total módulo: 40 archivos `.go` en packages (db 42 + wire 11 + adminweb 11) + tools/ · ~25.983 líneas**
 
 ---
 
@@ -205,8 +238,8 @@ Stdlib usada: `encoding/json`, `crypto/{aes,cipher,hmac,sha256}`, `compress/zlib
 ### 4.9 auth.go — RBAC embebido (M4)
 
 - `Permission`, `Session`, `AuthActive`
-- `Authenticate` → `*Session` (argon2id PHC), `CreateUser`, `CreateRole`, `ChangePassword`, `Revoke`
-- Gates: `checkReadLocked`/`checkWriteLocked`, `fieldDeny` + `redactDoc`/`filterTouchesFields`
+- `Authenticate` → `*Session` (argon2id PHC), `CreateUser`, `CreateRole`, `ChangePassword`, `Revoke`, `SetUserRoles` (M9x: reemplaza roles in-place preservando el hash)
+- Admin (M9d): `ListUsers`, `ListRoles`, `DeleteUser`, `DeleteRole`, `SystemSession`, `ResetAuth` (H10)
 - System colls: `_users`, `_roles` (lazy, CRUD genérico → `ErrForbidden`)
 
 ### 4.10 hooks.go — hooks Go (M5a)

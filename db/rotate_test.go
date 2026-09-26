@@ -15,7 +15,7 @@ var (
 	rotMasterB = []byte("master-B-32-bytes-long!!!!!!!!!!")
 )
 
-// rotateSetup creates a clean file-backed store with two docs and closes it.
+// rotateSetup crea un almacén limpio con respaldo en archivo, con dos documentos, y lo cierra.
 func rotateSetup(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -57,7 +57,7 @@ func TestRotateKeysMasterOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// New key opens and data is intact.
+	// Con la clave nueva se abre y los datos están intactos.
 	s2, err := Open(path, rotOpts(rotMasterB, "machine-A"))
 	if err != nil {
 		t.Fatalf("reopen with new master: %v", err)
@@ -68,7 +68,7 @@ func TestRotateKeysMasterOnly(t *testing.T) {
 	}
 	s2.Close()
 
-	// Old master must no longer decrypt.
+	// La clave maestra antigua ya no debe descifrar.
 	if _, err := Open(path, rotOpts(rotMasterA, "machine-A")); err == nil {
 		t.Fatal("old master still opens the file after rotation")
 	}
@@ -112,7 +112,7 @@ func TestRotateKeysNoOpRewrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Empty args = re-wrap with same credentials (fresh salt) — must be safe.
+	// Argumentos vacíos = volver a envolver con las mismas credenciales (salt nuevo) — debe ser seguro.
 	if err := s.RotateKeys(nil, ""); err != nil {
 		t.Fatalf("noop rotate: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestRotateKeysTamperedHeaderRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Tamper the on-disk header (schema_version byte) behind the store's back.
+	// Manipular la cabecera en disco (byte de schema_version) a espaldas del almacén.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +185,7 @@ func TestRotateKeysTamperedHeaderRejected(t *testing.T) {
 		t.Fatalf("want ErrCorrupt, got %v", err)
 	}
 
-	// Failed rotation must leave the file exactly as it was.
+	// Una rotación fallida debe dejar el archivo exactamente como estaba.
 	after, _ := os.ReadFile(path)
 	if !bytes.Equal(tampered, after) {
 		t.Fatal("failed rotation modified the file")
@@ -214,8 +214,8 @@ func TestRotateKeysRefusesDirtyStore(t *testing.T) {
 	}
 }
 
-// The critical adoption test: credentials rotated in RAM must stick, so
-// post-rotation mutations flush with the NEW KEK and reopen agrees.
+// La prueba crítica de adopción: las credenciales rotadas en RAM deben permanecer, de modo
+// que las mutaciones posteriores a la rotación hagan flush con la NUEVA KEK y la reapertura coincida.
 func TestRotateKeysRAMAdoptsNewCredentials(t *testing.T) {
 	_, path := rotateSetup(t)
 
@@ -226,7 +226,7 @@ func TestRotateKeysRAMAdoptsNewCredentials(t *testing.T) {
 	if err := s.RotateKeys(rotMasterB, "machine-B"); err != nil {
 		t.Fatal(err)
 	}
-	// Mutate AFTER rotation; the next flush re-wraps with the new KEK.
+	// Mutar DESPUÉS de la rotación; el siguiente flush vuelve a envolver con la nueva KEK.
 	if err := s.Insert("docs", Document{"_id": "d3", "v": "tres"}); err != nil {
 		t.Fatal(err)
 	}
@@ -312,8 +312,8 @@ func TestRotateKeysRequiresFileBacked(t *testing.T) {
 func TestRotateKeysThenMoveToOtherMachine(t *testing.T) {
 	dirA, pathA := rotateSetup(t)
 
-	// Provider moves the db to another machine: rotate the machine binding
-	// while the file is still on the source machine.
+	// El proveedor mueve la base de datos a otra máquina: se rota el vínculo de máquina
+	// mientras el archivo sigue en la máquina de origen.
 	s, err := Open(pathA, rotOpts(rotMasterA, "machine-A"))
 	if err != nil {
 		t.Fatal(err)
@@ -323,7 +323,7 @@ func TestRotateKeysThenMoveToOtherMachine(t *testing.T) {
 	}
 	s.Close()
 
-	// Copy the file to the destination machine's data directory.
+	// Copiar el archivo al directorio de datos de la máquina destino.
 	dirB := t.TempDir()
 	pathB := filepath.Join(dirB, "moved.mlstore")
 	if err := copyFile(pathA, pathB); err != nil {
@@ -331,7 +331,7 @@ func TestRotateKeysThenMoveToOtherMachine(t *testing.T) {
 	}
 	_ = dirA
 
-	// It opens at the destination with the new binding (and only with it).
+	// Se abre en el destino con el nuevo vínculo (y solo con él).
 	s2, err := Open(pathB, rotOpts(rotMasterA, "machine-B"))
 	if err != nil {
 		t.Fatalf("destination open: %v", err)

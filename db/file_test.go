@@ -36,7 +36,7 @@ func TestFlushOpenRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// file exists and is not plaintext JSON
+	// el archivo existe y no es JSON en texto plano
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -62,11 +62,11 @@ func TestFlushOpenRoundtrip(t *testing.T) {
 	if len(list) != 1 || list[0].Fields[0] != "status" {
 		t.Errorf("indexes reloaded: %v", list)
 	}
-	// unique index enforced after reload
+	// índice único aplicado tras recargar
 	_ = s2.Insert("q", Document{"_id": "3", "status": "OPEN"})
 	err = s2.Insert("q", Document{"_id": "4", "status": "OPEN"})
 	if !errors.Is(err, ErrDuplicate) {
-		// status is non-unique in this test — just ensure insert works
+		// status no es único en este test — solo se comprueba que la inserción funciona
 		if err != nil {
 			t.Errorf("insert after reload: %v", err)
 		}
@@ -100,7 +100,7 @@ func TestOpenTamperedHeader(t *testing.T) {
 	_ = s.Close()
 
 	raw, _ := os.ReadFile(path)
-	raw[10] ^= 0xff // flip schema_version byte
+	raw[10] ^= 0xff // invertir el byte de schema_version
 	_ = os.WriteFile(path, raw, 0o600)
 
 	if _, err := Open(path, testOpts()); !errors.Is(err, ErrCorrupt) {
@@ -131,7 +131,7 @@ func TestFlushNoopWhenClean(t *testing.T) {
 	if err := s.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	// clean flush: still no file required? dirty=true on create so file written
+	// flush limpio: no hace falta archivo, pero dirty=true al crear, así que se escribe
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("expected file after first flush: %v", err)
 	}
@@ -167,11 +167,11 @@ func TestCreatedThenReopenSameContent(t *testing.T) {
 	if len(all) != 2 {
 		t.Fatalf("docs: %d", len(all))
 	}
-	// unique still works
+	// el índice único sigue funcionando
 	if err := s2.Insert("users", Document{"_id": "u3", "name": "Ana"}); !errors.Is(err, ErrDuplicate) {
 		t.Errorf("unique after reload: %v", err)
 	}
-	// nested preserved
+	// anidados preservados
 	d, _ := s2.Get("users", "u1")
 	if n, ok := d["nested"].(map[string]any); !ok || n["a"] != float64(1) {
 		t.Errorf("nested: %v", d["nested"])

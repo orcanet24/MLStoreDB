@@ -10,7 +10,7 @@ import (
 func jsonUnmarshalMeta(b []byte, m *metaPayload) error { return json.Unmarshal(b, m) }
 func jsonUnmarshalDoc(b []byte, d *Document) error     { return json.Unmarshal(b, d) }
 
-// RepairReport summarizes what Repair changed while rewriting a store file.
+// RepairReport resume lo que cambió Repair al reescribir el archivo del almacén.
 type RepairReport struct {
 	Path            string `json:"path"`
 	Collections     int    `json:"collections"`
@@ -21,17 +21,17 @@ type RepairReport struct {
 	Resaved         bool   `json:"resaved"`
 }
 
-// Repair attempts to recover a semantically corrupt store at path and rewrites
-// a clean file (atomic replace). It can fix:
-//   - docs with non-string _id (dropped); missing _id gets an auto ULID
-//   - docs over the 1MB limit (dropped)
-//   - duplicate _id keys in the file (first sorted id kept)
-//   - unique-index conflicts (first sorted _id kept, later docs dropped)
-//   - stale/broken index state (indexes rebuilt from surviving docs)
+// Repair intenta recuperar un almacén semánticamente corrupto en path y reescribe un
+// archivo limpio (reemplazo atómico). Puede arreglar:
+//   - documentos con _id no string (se descartan); si falta el _id se genera un ULID
+//   - documentos que superan el límite de 1MB (se descartan)
+//   - claves _id duplicadas en el archivo (se conserva el primer id ordenado)
+//   - conflictos de índice único (se conserva el _id ordenado menor y se descartan los posteriores)
+//   - estado de índices obsoleto o roto (los índices se reconstruyen desde los documentos supervivientes)
 //
-// It cannot fix cryptographic corruption (bad magic/HMAC/GCM/JSON): those
-// return ErrCorrupt — restore a Snapshot instead. Takes the same flock as
-// OpenWithLock; returns ErrAlreadyOpen if another process holds the file.
+// No puede arreglar corrupción criptográfica (magic/HMAC/GCM/JSON incorrectos): esos casos
+// devuelven ErrCorrupt — restaura una Snapshot en su lugar. Toma el mismo flock que
+// OpenWithLock; devuelve ErrAlreadyOpen si otro proceso tiene el archivo.
 func Repair(path string, opts Options) (*RepairReport, error) {
 	if len(opts.MasterKey) == 0 {
 		return nil, errNoMaster
@@ -53,13 +53,13 @@ func Repair(path string, opts Options) (*RepairReport, error) {
 	}
 
 	var (
-		dek         []byte
-		effMachine  []byte
-		t, m, p     uint32
-		fd          *fileData
-		kdfSalt     [16]byte
-		createdAt   uint64
-		schemaHint  uint64
+		dek        []byte
+		effMachine []byte
+		t, m, p    uint32
+		fd         *fileData
+		kdfSalt    [16]byte
+		createdAt  uint64
+		schemaHint uint64
 	)
 
 	if h.FormatVer == 1 {
@@ -80,7 +80,7 @@ func Repair(path string, opts Options) (*RepairReport, error) {
 		copy(kdfSalt[:], h.KDFSalt[:])
 		createdAt = h.CreatedAt
 		schemaHint = h.SchemaVersion
-		// Tolerant scan: decrypt all DOC records regardless of COMMIT/suspect.
+		// Escaneo tolerante: descifrar todos los registros DOC sin tener en cuenta COMMIT o sospechas.
 		fd, err = loadV2FileDataTolerant(data, dek, schemaHint)
 		if err != nil {
 			return nil, err
@@ -110,7 +110,7 @@ func Repair(path string, opts Options) (*RepairReport, error) {
 	s.kdfTime, s.kdfMem, s.kdfPar = t, m, p
 	s.dirty = true
 	s.sawFile = true
-	s.v1Migration = true // force full rewrite as clean v2
+	s.v1Migration = true // forzar una reescritura completa como v2 limpio
 
 	rep := s.loadFileDataRepair(fd)
 	rep.Path = path
@@ -122,8 +122,8 @@ func Repair(path string, opts Options) (*RepairReport, error) {
 	return rep, nil
 }
 
-// loadV2FileDataTolerant decrypts every DOC/META record in a v2 file
-// (ignoring COMMIT boundary) into fileData for Repair.
+// loadV2FileDataTolerant descifra todos los registros DOC/META de un archivo v2
+// (ignorando la frontera COMMIT) y los lleva a fileData para Repair.
 func loadV2FileDataTolerant(data []byte, dek []byte, schemaHint uint64) (*fileData, error) {
 	fd := &fileData{
 		Meta:        fileMeta{App: "mlstoredb", SchemaVersion: schemaHint},
@@ -182,7 +182,7 @@ func loadV2FileDataTolerant(data []byte, dek []byte, schemaHint uint64) (*fileDa
 		}
 		off += total
 	}
-	// stable doc order for deterministic dup/conflict keep
+	// orden estable de documentos para elegir duplicados/conflictos de forma determinista
 	for _, fc := range fd.Collections {
 		sort.SliceStable(fc.Docs, func(i, j int) bool {
 			a, _ := fc.Docs[i]["_id"].(string)
@@ -193,9 +193,9 @@ func loadV2FileDataTolerant(data []byte, dek []byte, schemaHint uint64) (*fileDa
 	return fd, nil
 }
 
-// loadFileDataRepair rebuilds collections tolerantly and fills rep.
-// Docs are loaded first; indexes are rebuilt after so unique conflicts can
-// drop the later doc instead of aborting the whole open.
+// loadFileDataRepair reconstruye las colecciones de forma tolerante y rellena rep.
+// Los documentos se cargan primero y los índices se reconstruyen después, para que los
+// conflictos de único puedan descartar el documento posterior en lugar de abortar toda la apertura.
 func (s *Store) loadFileDataRepair(fd *fileData) *RepairReport {
 	rep := &RepairReport{}
 	s.schemaVersion = fd.Meta.SchemaVersion
@@ -211,11 +211,11 @@ func (s *Store) loadFileDataRepair(fd *fileData) *RepairReport {
 			continue
 		}
 		c := &collection{
-			entries:  map[string]*docEntry{},
+			entries:   map[string]*docEntry{},
 			sensitive: append([]string{}, fc.Sensitive...),
 		}
 
-		// Pass 1: keep readable docs (sorted id order → deterministic dup keep).
+		// Paso 1: conservar los documentos legibles (orden de id creciente → elección determinista de duplicados).
 		for _, doc := range fc.Docs {
 			if doc == nil {
 				rep.DocsDropped++
@@ -239,14 +239,14 @@ func (s *Store) loadFileDataRepair(fd *fileData) *RepairReport {
 			c.entries[id] = newDocEntry(stored)
 		}
 
-		// Stable order for unique-conflict resolution (keep lowest _id).
+		// Orden estable para resolver conflictos de único (conservar el _id menor).
 		ids := make([]string, 0, len(c.entries))
 		for id := range c.entries {
 			ids = append(ids, id)
 		}
 		sort.Strings(ids)
 
-		// Pass 2: rebuild indexes; unique conflict ⇒ drop later doc.
+		// Paso 2: reconstruir los índices; si hay conflicto de único ⇒ descartar el documento posterior.
 		for _, info := range fc.Indexes {
 			if len(info.Fields) == 0 {
 				continue

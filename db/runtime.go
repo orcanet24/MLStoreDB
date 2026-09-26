@@ -8,8 +8,8 @@ import (
 	"github.com/gofrs/flock"
 )
 
-// acquireLock takes an exclusive process lock next to the db file.
-// Returns ErrAlreadyOpen if another process holds it.
+// acquireLock toma un bloqueo de proceso exclusivo junto al archivo de la base de datos.
+// Devuelve ErrAlreadyOpen si otro proceso lo tiene.
 func acquireLock(dbPath string, lockName string) (*flock.Flock, error) {
 	lockPath := filepath.Join(filepath.Dir(dbPath), lockName)
 	fl := flock.New(lockPath)
@@ -23,8 +23,8 @@ func acquireLock(dbPath string, lockName string) (*flock.Flock, error) {
 	return fl, nil
 }
 
-// Snapshot writes the current state to dest as a fully encrypted .mlstore
-// without changing s.path (backup R10). Runs outside s.mu like Flush.
+// Snapshot escribe el estado actual en dest como un .mlstore totalmente cifrado sin
+// cambiar s.path (respaldo R10). Se ejecuta fuera de s.mu, igual que Flush.
 func (s *Store) Snapshot(dest string) error {
 	if dest == "" {
 		return errors.New("db: Snapshot dest required")
@@ -44,8 +44,8 @@ func (s *Store) Snapshot(dest string) error {
 	return writeState(st)
 }
 
-// startAutoFlush spawns a background ticker that Flushes when dirty
-// (period from Options.AutoFlush, default 2s). Stop is via Close.
+// startAutoFlush lanza un ticker en segundo plano que hace Flush cuando hay datos sucios
+// (periodo de Options.AutoFlush, 2s por defecto). Se detiene con Close.
 func (s *Store) startAutoFlush() {
 	s.mu.RLock()
 	path := s.path
@@ -65,7 +65,7 @@ func (s *Store) startAutoFlush() {
 			case <-s.flushStop:
 				return
 			case <-t.C:
-				// Flush only briefly holds s.mu (snapshot); I/O is outside.
+				// Flush solo mantiene s.mu brevemente (instantánea); la E/S queda fuera.
 				_ = s.Flush()
 			}
 		}
@@ -82,8 +82,8 @@ func (s *Store) stopAutoFlush() {
 	s.flushDone = nil
 }
 
-// OpenWithLock is Open + exclusive file lock + auto-flush ticker.
-// Prefer this for the MLD binary (single process owner).
+// OpenWithLock es Open + bloqueo de archivo exclusivo + ticker de auto-flush.
+// Prefiérelo para el binario MLD (propietario único del proceso).
 func OpenWithLock(path string, opts Options) (*Store, error) {
 	s, err := Open(path, opts)
 	if err != nil {

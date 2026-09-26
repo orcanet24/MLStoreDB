@@ -10,16 +10,16 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-// InstallIDFileName is the per-installation identity file. It lives NEXT TO
-// the database file (never inside it) and holds a random ULID generated on
-// first use. Feeding it as Options.MachineID binds the file's KEK to this
-// installation only, so a copied .mlstore cannot be decrypted elsewhere even
-// if the master key material is available.
+// InstallIDFileName es el archivo de identidad por instalación. Vive JUNTO AL archivo
+// de la base de datos (nunca dentro de él) y contiene un ULID aleatorio generado en el
+// primer uso. Pasarlo como Options.MachineID liga la KEK del archivo a esta instalación,
+// así que un .mlstore copiado no se puede descifrar en otro sitio aunque se disponga del
+// material de la clave maestra.
 const InstallIDFileName = "mlstoredb.machineid"
 
 const maxMachineIDLen = 256
 
-// validMachineID accepts letters, digits and - _ . (canonical ULIDs qualify).
+// validMachineID acepta letras, dígitos y - _ . (los ULID canónicos son válidos).
 func validMachineID(s string) bool {
 	if s == "" || len(s) > maxMachineIDLen {
 		return false
@@ -41,26 +41,26 @@ func installIDPath(dbPath string) string {
 	return filepath.Join(filepath.Dir(dbPath), InstallIDFileName)
 }
 
-// ResolveMachineID returns the machine identity to use as Options.MachineID
-// for the database at dbPath:
+// ResolveMachineID devuelve la identidad de máquina que hay que usar como
+// Options.MachineID para la base de datos en dbPath:
 //
-//  1. explicit non-empty → validated and returned as-is (tests / explicit
-//     override; the install-id file is neither read nor written).
-//  2. otherwise the install-id file next to dbPath: if it exists it is
-//     validated and returned (stable across restarts and updates); if not,
-//     a fresh random ULID is generated, persisted atomically and returned.
+//  1. si se indica una explícita no vacía → se valida y se devuelve tal cual (tests /
+//     anulación explícita; no se lee ni se escribe el archivo de id de instalación).
+//  2. en caso contrario, el archivo de id de instalación junto a dbPath: si existe, se
+//     valida y se devuelve (estable entre reinicios y actualizaciones); si no, se genera
+//     un ULID aleatorio nuevo, se persiste de forma atómica y se devuelve.
 //
-// Call it once at installation/setup time, pass the result as
-// Options.MachineID on every later Open/OpenWithLock of that database, and
-// register the value with the license server (it is both the per-customer
-// binding and the recovery backup if the identity file is ever lost).
+// Llámalo una vez en la instalación/configuración, pasa el resultado como
+// Options.MachineID en todos los Open/OpenWithLock posteriores de esa base de datos y
+// registra el valor en el servidor de licencias (es a la vez el vínculo por cliente y la
+// copia de recuperación si alguna vez se pierde el archivo de identidad).
 //
-// Existing databases created with the default MachineGuid binding keep
-// opening with Options.MachineID empty — do not switch an existing file to
-// an install id without a key-rotation/rewrite plan.
+// Las bases de datos existentes creadas con el vínculo MachineGuid por defecto siguen
+// abriéndose con Options.MachineID vacío — no cambies un archivo existente a un id de
+// instalación sin un plan de rotación de claves o reescritura.
 //
-// Several database files in the same directory intentionally share one
-// installation identity (one identity per data directory).
+// Varios archivos de base de datos en el mismo directorio comparten intencionadamente
+// una única identidad de instalación (una identidad por directorio de datos).
 func ResolveMachineID(dbPath, explicit string) (string, error) {
 	if explicit != "" {
 		if !validMachineID(explicit) {
@@ -74,9 +74,9 @@ func ResolveMachineID(dbPath, explicit string) (string, error) {
 		id := strings.TrimSpace(string(data))
 		switch {
 		case id == "":
-			// Empty can mean (a) a concurrent creator still between O_EXCL
-			// create and WriteString, or (b) a truncated/corrupt file.
-			// Retry briefly for (a); re-read after create→write settles.
+			// Vacío puede significar (a) un creador concurrente aún entre el O_EXCL y el
+			// WriteString, o (b) un archivo truncado o corrupto. Se reintenta brevemente
+			// para (a); se relee cuando el create→write se estabiliza.
 			for attempt := 0; attempt < 8; attempt++ {
 				time.Sleep(2 * time.Millisecond)
 				data, err = os.ReadFile(p)
@@ -103,9 +103,9 @@ func ResolveMachineID(dbPath, explicit string) (string, error) {
 	if !os.IsNotExist(err) {
 		return "", err
 	}
-	// First use for this installation: create exclusively so exactly one
-	// identity is ever generated, even with concurrent creators. Losers adopt
-	// the winner's id (a short read loop covers the create→write window).
+	// Primer uso de esta instalación: crear de forma exclusiva para que se genere
+	// exactamente una identidad, incluso con creadores concurrentes. Los que pierden
+	// adoptan el id del ganador (un breve bucle de lectura cubre la ventana create→write).
 	id := ulid.Make().String()
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err == nil {
@@ -128,7 +128,7 @@ func ResolveMachineID(dbPath, explicit string) (string, error) {
 		}
 		return "", errors.New("db: install id file created but unreadable: " + p)
 	}
-	// Filesystem without O_EXCL support: last-resort replace + converge loop.
+	// Sistema de archivos sin soporte de O_EXCL: reemplazo de último recurso + bucle de convergencia.
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
 		if err := atomicReplace(p, []byte(id+"\n")); err != nil {

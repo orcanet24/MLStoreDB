@@ -1153,6 +1153,66 @@ db.customers.deleteOne({ _id: "c1" })
 db.customers.drop()</code></pre>
 </section>
 
+<!-- ============ ES 10 ============ -->
+<section class="content lang-es" data-topic="10">
+<h2>10 · Consola web de administración</h2>
+<p><code>mls-server</code> sirve una consola web completa (phpMyAdmin +
+Neo4j Browser) desde el binario — sin node, sin CDN.</p>
+<h3>Arrancar</h3>
+<pre><code>go run ./tools/mls-server -addr 127.0.0.1:28917 -web 127.0.0.1:28918 \
+    -path datos.mlstore -key "clave-32-bytes!!" -db midb</code></pre>
+<p>Windows: <code>iniciar-servidor.bat</code>. Abre <b>http://127.0.0.1:28918</b>.</p>
+<h3>Primer uso</h3>
+<p>Sin usuarios → pide crear el administrador (user ≥ 3, pass ≥ 6). Luego login normal;
+los permisos RBAC del motor se aplican por pantalla.</p>
+<h3>Secciones</h3>
+<table>
+<tr><th>Sección</th><th>Funciones</th></tr>
+<tr><td>Panel</td><td>colecciones, docs, tamaño archivo, caché RAM</td></tr>
+<tr><td>Documentos</td><td>crear/editar JSON, paginación + filtro + sort, eliminar</td></tr>
+<tr><td>Índices / Import&amp;Export / Triggers</td><td>gestión completa + CSV/JSON/NDJSON con preview</td></tr>
+<tr><td>Grafos</td><td>canvas con esferas por colección; Shift+arrastra para conectar; BFS y rutas</td></tr>
+<tr><td>Usuarios y roles</td><td>alta/baja, matriz de permisos (requiere admin wildcard *)</td></tr>
+</table>
+<h3>Canvas de grafos</h3>
+<ul>
+<li>Busca un <code>_id</code>, <b>doble clic</b> expande vecinos.</li>
+<li><b>Shift + arrastrar</b> entre nodos → crea arista (tipo + props).</li>
+<li><b>Recorrer (BFS)</b> con profundidad y <b>ruta más corta</b> resaltados.</li>
+<li>Agrupar por colección, pan, zoom, panel lateral con JSON del nodo.</li>
+</ul>
+</section>
+
+<!-- ============ EN 10 ============ -->
+<section class="content lang-en" data-topic="10">
+<h2>10 · Admin web console</h2>
+<p><code>mls-server</code> serves a full web console (phpMyAdmin + Neo4j
+Browser) from the binary — no node, no CDN.</p>
+<h3>Starting</h3>
+<pre><code>go run ./tools/mls-server -addr 127.0.0.1:28917 -web 127.0.0.1:28918 \
+    -path data.mlstore -key "my-32-bytes-key!!" -db mydb</code></pre>
+<p>Windows: <code>iniciar-servidor.bat</code>. Open <b>http://127.0.0.1:28918</b>.</p>
+<h3>First use</h3>
+<p>No users → prompts to create the administrator (user ≥ 3, pass ≥ 6). Then normal
+login; engine RBAC permissions apply per screen.</p>
+<h3>Sections</h3>
+<table>
+<tr><th>Section</th><th>Features</th></tr>
+<tr><td>Dashboard</td><td>collections, docs, file size, RAM cache</td></tr>
+<tr><td>Documents</td><td>create/edit JSON, pagination + filter + sort, delete</td></tr>
+<tr><td>Indexes / Import&amp;Export / Triggers</td><td>full management + CSV/JSON/NDJSON with preview</td></tr>
+<tr><td>Graphs</td><td>canvas with spheres per collection; Shift+drag to connect; BFS and paths</td></tr>
+<tr><td>Users &amp; roles</td><td>create/delete, permission matrix (requires admin wildcard *)</td></tr>
+</table>
+<h3>Graph canvas</h3>
+<ul>
+<li>Search an <code>_id</code>, <b>double-click</b> expands neighbors.</li>
+<li><b>Shift + drag</b> between nodes → creates an edge (type + props).</li>
+<li><b>Traverse (BFS)</b> with depth and <b>shortest path</b> highlighted.</li>
+<li>Group by collection, pan, zoom, side panel with node JSON.</li>
+</ul>
+</section>
+
 </main>
 
 <footer>MLStoreDB · Manual · <span id="footer-year"></span></footer>
@@ -1168,6 +1228,7 @@ const TOPICS = [
   { id: "07", es: "Triggers",     en: "Triggers" },
   { id: "08", es: "Grafos",       en: "Graphs" },
   { id: "09", es: "Servidor Mongo", en: "Mongo server" },
+  { id: "10", es: "Consola web", en: "Admin console" },
 ];
 
 let lang = "es";

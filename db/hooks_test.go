@@ -59,7 +59,7 @@ func TestHookAfterSyncAndMatchAll(t *testing.T) {
 	if got.Load() != "alpha:a1" {
 		t.Errorf("after hook got %v", got.Load())
 	}
-	// "*" pattern too
+	// también el patrón "*"
 	s2 := New()
 	var hit atomic.Bool
 	if _, err := s2.On(AfterInsert, "*", func(h *HookContext) error {
@@ -165,7 +165,7 @@ func TestHookUpdateDeleteEvents(t *testing.T) {
 
 func TestHookNestedMutationAndDepth(t *testing.T) {
 	s := New()
-	// chain: insert into c0 → hook inserts into c1 → ... each level +1 depth
+	// cadena: insertar en c0 → el hook inserta en c1 → ... cada nivel suma 1 de profundidad
 	for i := 0; i < maxHookDepth+2; i++ {
 		src := "c" + string(rune('a'+i))
 		dst := "c" + string(rune('a'+i+1))
@@ -175,14 +175,14 @@ func TestHookNestedMutationAndDepth(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// root insert: depth 1 (c0 hook) then nested... exceeds maxHookDepth → ErrHookDepth
-	// After-hooks ignore errors, so the chain stops silently at the limit.
+	// inserción raíz: profundidad 1 (hook de c0) y luego anidada... supera maxHookDepth → ErrHookDepth
+	// Los hooks "after" ignoran los errores, así que la cadena se detiene en silencio al llegar al límite.
 	if err := s.Insert("ca", Document{"_id": "x"}); err != nil {
 		t.Fatal(err)
 	}
-	// deepest level that should exist: maxHookDepth nested inserts succeeded
-	// ca (root) → cb(1) → cc(2) → ... up to depth maxHookDepth
- deepest := "c" + string(rune('a'+maxHookDepth))
+	// nivel más profundo que debería existir: se lograron maxHookDepth inserciones anidadas
+	// ca (raíz) → cb(1) → cc(2) → ... hasta la profundidad maxHookDepth
+	deepest := "c" + string(rune('a'+maxHookDepth))
 	if _, err := s.Get(deepest, "x"); err != nil {
 		t.Errorf("expected doc at %s (depth limit): %v", deepest, err)
 	}
@@ -194,7 +194,7 @@ func TestHookNestedMutationAndDepth(t *testing.T) {
 
 func TestHookCycleDetectionBefore(t *testing.T) {
 	s := New()
-	// before_insert on "a" inserts into "a" again → same hook re-entered → cycle
+	// before_insert sobre "a" inserta de nuevo en "a" → se vuelve a entrar en el mismo hook → ciclo
 	if _, err := s.On(BeforeInsert, "a", func(h *HookContext) error {
 		return h.Insert("a", Document{"_id": "nested"})
 	}); err != nil {
@@ -210,7 +210,7 @@ func TestHookCycleDetectionBefore(t *testing.T) {
 
 func TestHookDepthExceededBefore(t *testing.T) {
 	s := New()
-	// distinct hooks chained a→b→c... : depth exceeded (not cycle)
+	// hooks distintos encadenados a→b→c...: se supera la profundidad (no es un ciclo)
 	for i := 0; i < maxHookDepth+2; i++ {
 		src := "c" + string(rune('a'+i))
 		dst := "c" + string(rune('a'+i+1))
@@ -224,7 +224,7 @@ func TestHookDepthExceededBefore(t *testing.T) {
 	if !errors.Is(err, ErrHookDepth) {
 		t.Errorf("Insert = %v, want ErrHookDepth", err)
 	}
-	// root was vetoed at depth exceeded inside the chain → nothing persisted at root
+	// la raíz quedó vetada al superar la profundidad dentro de la cadena → no se persistió nada en la raíz
 	if _, err := s.Get("ca", "x"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("root must not exist: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestHookAsyncFIFO(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 50; i++ {
-		if err := s.Insert("q", Document{"_id": string(rune('a' + i%26)) + string(rune('0'+i/26))}); err != nil {
+		if err := s.Insert("q", Document{"_id": string(rune('a'+i%26)) + string(rune('0'+i/26))}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -254,7 +254,7 @@ func TestHookAsyncFIFO(t *testing.T) {
 	if n != 50 {
 		t.Errorf("async ran %d/50", n)
 	}
-	// FIFO: queue was filled in insert order; single worker preserves it
+	// FIFO: la cola se llenó en el orden de inserción; un solo worker lo preserva
 	mu.Lock()
 	for i := 1; i < len(order); i++ {
 		if order[i] != string(rune('a'+i%26))+string(rune('0'+i/26)) {
@@ -294,11 +294,11 @@ func TestHookRBACBypass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var auditMsg atomic.Value // string: "" = ok
+	var auditMsg atomic.Value // string: "" = correcto
 	auditMsg.Store("")
 	if _, err := s.On(AfterInsert, "q", func(h *HookContext) error {
-		// hook is trusted: bypasses RBAC, writes audit even though
-		// raw Store API would be ErrUnauthorized
+		// el hook es de confianza: se salta el RBAC y escribe la auditoría aunque
+		// la API cruda del Store devolvería ErrUnauthorized
 		if err := h.Insert("audit", Document{"_id": h.ID}); err != nil {
 			auditMsg.Store(err.Error())
 		}
@@ -312,11 +312,11 @@ func TestHookRBACBypass(t *testing.T) {
 	if msg := auditMsg.Load().(string); msg != "" {
 		t.Errorf("hook Insert audit = %s", msg)
 	}
-	// audit exists (hook bypassed auth); raw Store still denied
+	// la auditoría existe (el hook se saltó la autenticación); el Store crudo sigue denegado
 	if _, err := s.Get("audit", "1"); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("raw Get audit = %v", err)
 	}
-	// but hook cannot write system colls
+	// pero el hook no puede escribir en colecciones del sistema
 	var sysMsg atomic.Value
 	sysMsg.Store("")
 	if _, err := s.On(AfterInsert, "q2", func(h *HookContext) error {
@@ -336,7 +336,7 @@ func TestHookRBACBypass(t *testing.T) {
 }
 
 func TestHookNoRegistrationOverheadPath(t *testing.T) {
-	// sanity: mutations work identically with zero hooks registered
+	// comprobación: las mutaciones funcionan igual con cero hooks registrados
 	s := New()
 	for i := 0; i < 10; i++ {
 		if err := s.Insert("q", Document{"_id": string(rune('0' + i))}); err != nil {
@@ -363,15 +363,15 @@ func TestHookAsyncBackpressureBounded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// first job blocks the worker
+	// el primer trabajo bloquea al worker
 	if err := s.Insert("q", Document{"_id": "1"}); err != nil {
 		t.Fatal(err)
 	}
 	<-started
-	// fill queue beyond capacity without deadlocking the test:
-	// queue bound = hookQueueSize; insert hookQueueSize more (fills buffer),
-	// the next enqueue would block — we don't issue it (that's the contract).
-	// Instead verify WaitAsyncHooks still drains after release.
+	// llenar la cola por encima de su capacidad sin bloquear el test:
+	// el límite de la cola es hookQueueSize; insertar hookQueueSize más (llena el búfer),
+	// el siguiente envío se bloquearía — no se emite (ese es el contrato).
+	// En su lugar se comprueba que WaitAsyncHooks sigue drenando tras liberar.
 	for i := 0; i < 5; i++ {
 		if err := s.Insert("q", Document{"_id": string(rune('2' + i))}); err != nil {
 			t.Fatal(err)
@@ -382,6 +382,6 @@ func TestHookAsyncBackpressureBounded(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// ensure worker actually stopped
+	// asegurar que el worker realmente se detuvo
 	time.Sleep(10 * time.Millisecond)
 }

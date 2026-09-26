@@ -19,7 +19,7 @@ func TestResolveMachineIDGeneratesAndStaysStable(t *testing.T) {
 		t.Fatalf("generated id %q is not a canonical 26-char ULID", id1)
 	}
 
-	// Second call must return the same id — no regeneration.
+	// La segunda llamada debe devolver el mismo id — sin regenerarlo.
 	id2, err := ResolveMachineID(dbPath, "")
 	if err != nil {
 		t.Fatalf("second resolve: %v", err)
@@ -28,7 +28,7 @@ func TestResolveMachineIDGeneratesAndStaysStable(t *testing.T) {
 		t.Fatalf("identity not stable: %q vs %q", id1, id2)
 	}
 
-	// And the file must exist next to the db path with the same content.
+	// Y el archivo debe existir junto a la ruta de la base de datos con el mismo contenido.
 	data, err := os.ReadFile(filepath.Join(dir, InstallIDFileName))
 	if err != nil {
 		t.Fatalf("install id file missing: %v", err)
@@ -49,11 +49,11 @@ func TestResolveMachineIDExplicitWinsWithoutFileIO(t *testing.T) {
 	if id != "Mi-Instalar_ID.01" {
 		t.Fatalf("explicit id not honored: %q", id)
 	}
-	// Explicit mode must not create the install-id file.
+	// El modo explícito no debe crear el archivo de id de instalación.
 	if _, err := os.Stat(filepath.Join(dir, InstallIDFileName)); !os.IsNotExist(err) {
 		t.Fatalf("explicit mode created install id file (err=%v)", err)
 	}
-	// Invalid characters rejected.
+	// Se rechazan los caracteres inválidos.
 	if _, err := ResolveMachineID(dbPath, "bad id con espacios!"); err == nil {
 		t.Fatal("expected error for invalid explicit MachineID")
 	}
@@ -98,7 +98,7 @@ func TestResolveMachineIDEmptyFileRegenerates(t *testing.T) {
 		t.Fatal("empty install id file must be an error, not silently regenerated")
 	}
 
-	// Corrupt characters are also an error (never silently rebind the KEK).
+	// Los caracteres corruptos también son un error (nunca se re-vincula la KEK en silencio).
 	if err := os.WriteFile(p, []byte("no valid chars !!\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestOpenWithInstallIDRoundtrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.mlstore")
 
-	// Setup time (installer): resolve the installation identity once.
+	// Momento de configuración (instalador): resolver la identidad de instalación una vez.
 	installID, err := ResolveMachineID(path, "")
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +162,7 @@ func TestOpenWithInstallIDRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Same installation reopens fine.
+	// La misma instalación reabre sin problemas.
 	s2, err := Open(path, opts())
 	if err != nil {
 		t.Fatal(err)
@@ -172,15 +172,15 @@ func TestOpenWithInstallIDRoundtrip(t *testing.T) {
 	}
 	s2.Close()
 
-	// Theft simulation: the attacker copies the db file to ANOTHER machine's
-	// data directory. That machine resolves its own install id (or its
-	// MachineGuid); the KEK never matches, so decryption is impossible.
+	// Simulación de robo: el atacante copia el archivo de la base de datos al directorio
+	// de datos de OTRA máquina. Esa máquina resuelve su propia identidad de instalación
+	// (o su MachineGuid); la KEK nunca coincide, así que el descifrado es imposible.
 	otherDir := t.TempDir()
 	copied := filepath.Join(otherDir, "app.mlstore")
 	if err := copyFile(path, copied); err != nil {
 		t.Fatal(err)
 	}
-	// Resolve the other machine's identity (generated there, not here).
+	// Resolver la identidad de la otra máquina (generada allí, no aquí).
 	otherID, err := ResolveMachineID(copied, "")
 	if err != nil {
 		t.Fatal(err)
@@ -190,11 +190,11 @@ func TestOpenWithInstallIDRoundtrip(t *testing.T) {
 	if _, err := Open(copied, stolen); err == nil {
 		t.Fatal("db stolen to another installation opened — binding broken")
 	}
-	// Even the attacker's known master + their own MachineGuid fallback fails.
+	// Incluso el respaldo del atacante con su máster conocido + su propio MachineGuid falla.
 	if _, err := Open(copied, Options{MasterKey: []byte("master-key-32-bytes-long!!!!!!!"), LightKDF: true}); err == nil {
 		t.Fatal("stolen db opened with master-only options — binding broken")
 	}
-	// ...and the same file still opens at its original installation.
+	// ...y el mismo archivo sigue abriéndose en su instalación original.
 	if _, err := Open(path, opts()); err != nil {
 		t.Fatalf("original installation must keep opening the db: %v", err)
 	}
@@ -209,9 +209,9 @@ func copyFile(src, dst string) error {
 }
 
 func TestOpenWithEmptyMachineIDFallsBackToInstallIDFile(t *testing.T) {
-	// Documents the intended wiring: empty Options.MachineID means "derive from
-	// MachineGuid"; the app-level default can instead resolve the install id
-	// first. Here we just verify ResolveMachineID output is accepted as-is.
+	// Documenta el conexionado previsto: Options.MachineID vacío significa "derivar del
+	// MachineGuid"; el valor por defecto a nivel de aplicación puede resolver antes el id
+	// de instalación. Aquí solo comprobamos que la salida de ResolveMachineID se acepta tal cual.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.mlstore")
 	id, err := ResolveMachineID(path, "")

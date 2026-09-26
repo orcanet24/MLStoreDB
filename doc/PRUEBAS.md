@@ -36,9 +36,10 @@ go run ./tools/smoke
 go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 ```
 
-**Resultado actual de referencia:** `go test ./... -count=1` → **ok** ·
-**201 PASS / 0 FAIL** (motor 173 + wire 28) · `go vet` limpio ·
-`scripts/test-race.ps1` → **race verde (db + wire)**.
+**Resultado actual de referencia (M9x, 2026-09-26):** `go test ./... -count=1` → **ok** ·
+**233 PASS / 0 FAIL** (db 181 + wire 28 + adminweb 24) · `go vet` limpio · `gofmt -l` vacío ·
+`scripts/test-race.ps1` → **race verde (db + wire + adminweb)** · informe:
+[INFORME_AUDITORIA.md](INFORME_AUDITORIA.md).
 
 > Nota: `-race` requiere `CGO_ENABLED=1` + toolchain C. En este entorno hay gcc (MSYS2, `C:\msys64\mingw64\bin\gcc.exe`); usar `powershell -File scripts/test-race.ps1` que setea `CGO_ENABLED=1` y resuelve el PATH automáticamente.
 
@@ -204,6 +205,34 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 | BenchmarkCountComplexNested | count path `payload.shipping.mode` |
 | BenchmarkReopenComplex10k | descifra + unmarshal + rebuild 10k complejos |
 
+### 2.9 `adminweb/` — consola web (M9 + M9x, 24 tests)
+
+| Test | Cubre |
+|---|---|
+| TestSetupFirstUserAndLogin | setup primer usuario (rol admin), login, segundo setup → 409 |
+| TestLoginFailAndRateLimit | 401 × 5 → 429 (rate-limit por IP) |
+| TestUnauthorizedAndCSRF | 401 sin login · 403 mutación sin CSRF · 201 con CSRF |
+| TestCollectionsCRUD | crear/listar/eliminar, duplicado 409, nombre inválido 400 |
+| TestDocsCRUDFlow | insert (auto _id, duplicado 409, _id no-string 400), browse+filtro+sort+paginación, get, replace (_id mismatch 400), delete (404) |
+| TestReadOnlyUserPermissions | usuario read-only: ve pero no escribe (403), solo ve su colección |
+| TestSecurityHeadersAndStatic | CSP/X-Frame-Options, index/app.css/app.js con MIME correcto (regresión del bug de registro de Windows) |
+| TestStats | dashboard: totalDocs, authActive |
+| TestIndexesAdmin | crear/listar/eliminar, unique → 409 en duplicado |
+| TestExportFormats | JSON/NDJSON/CSV (BOM) + export filtrado |
+| TestImportFormats | CSV (inferencia de tipos, _id string), JSON (array, errores por fila), NDJSON, upsert, bad JSON → 400 |
+| TestTriggersAdmin | crear → dispara (audit con `$get`) → disable → no dispara → delete |
+| TestTriggerPermissions | trigger en colección sin permiso → 403; con permiso → 200 |
+| TestUsersRolesAdmin | CRUD usuarios/roles, unique, rol en uso → 409 |
+| TestAdminOnlyGuard | usuario no-admin → 403 en gestión de usuarios/roles |
+| TestQueryConsole | consulta filtro JSON → total + docs; colección ausente → vacío |
+| TestListUsersEmpty | lista vacía cuando no hay usuarios |
+| TestSetUserRoles *(db)* | cambio de roles in-place preserva la password (regresión A4) |
+| e2e multi-BD *(M9x)* | forward con query + body bufferizado: export con formato, import asíncrono, setup por BD |
+| TestGraphMetaAndEdgeCreate | meta (edgeTypes/vertexColls), crear arista, validación |
+| TestGraphNeighborsAndResolve | aristas from/to con props, resolve ids→docs |
+| TestGraphTraverseAndPath | BFS depth 2, shortest path ana→carla, sin ruta → [] |
+| TestGraphEdgeDeleteAndPermissions | eliminar arista, read-only → 403 |
+
 ---
 
 ## 3. Matriz de cobertura (design §9 → estado)
@@ -226,6 +255,22 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -db demo
 | 14. Hooks before/after + async (M5a) | ✅ | hooks_test |
 | 15. Triggers JSON declarativos (M5b) | ✅ | triggers_test |
 | 16. Grafo edges/Traverse/Path (M6) | ✅ | graph_test |
+| 17. Wire protocol Mongo (M8) | ✅ | wire_test |
+| 18. Consola web: auth/CSRF/CRUD/io/grafos/usuarios-roles (M9a–d) | ✅ | adminweb_test + users_test + graph_test |
+| 19. Multi-BD + forwarder (query/body) + auditoría M9x | ✅ | multiserver + e2e navegador (INFORME_AUDITORIA) |
+
+---
+
+## 3. Suites del package `adminweb` (M9, 17 tests)
+
+`adminweb_test.go` (13): setup/login · rate-limit (429) · CSRF (403) ·
+colecciones CRUD · docs CRUD completo (filtro/sort/paginación/duplicados) ·
+permisos read-only · headers de seguridad + MIME de assets (regresión bug
+de registro Windows) · stats · índices · export 3 formatos · import
+CSV/JSON/NDJSON · triggers (fire real con `$get`) · permisos de triggers.
+
+`graph_test.go` (4): meta+arista · vecinos+resolve · traverse+ruta ·
+borrar arista+permisos.
 
 ---
 

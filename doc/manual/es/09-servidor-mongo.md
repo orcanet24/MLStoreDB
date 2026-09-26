@@ -25,11 +25,14 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -path datos.mlstore \
 |---|---|---|
 | `-addr` | `127.0.0.1:28917` | Dirección de escucha (puerto propio de MLStoreDB, no colisiona con un MongoDB real en 27017) |
 | `-path` | *(memoria)* | Archivo `.mlstore` |
-| `-db` | nombre del archivo | Nombre de la BD que ven los clientes |
+| `-db` | nombre del archivo | Nombre de la BD que ven los clientes; sin `-path`, si existe `<dbdir>/<nombre>/<nombre>.mlstore` sirve ese archivo |
+| `-web` | off | Consola web de administración (p. ej. `127.0.0.1:28918`) |
+| `-dbdir` | `databases` | Directorio de bases descubiertas/creadas por la consola web |
 | `-key` | — | Master key (requerida para archivos cifrados) |
 | `-machine` | default | Machine ID del KEK |
-| `-user` / `-pass` | — | Habilita SCRAM-SHA-256 en el wire |
+| `-user` / `-pass` | — | Habilita SCRAM-SHA-256 en el wire (debe ser un usuario existente de la base si ésta tiene RBAC activo) |
 | `-light-kdf` | off | Argon2 rápido (solo primera creación) |
+| `-reset-auth` | off | Borra usuarios/roles/sesiones sin tocar datos y sale |
 
 ## Conectar
 
@@ -57,12 +60,18 @@ go run ./tools/mls-server -addr 127.0.0.1:28917 -path datos.mlstore \
 
 ## Autenticación
 
-- Sin `-user`: el servidor no exige auth. Si el **motor** tiene RBAC
-  activo (≥1 usuario), toda operación devuelve `Unauthorized` — en ese
-  caso configura `-user`/`-pass` con un usuario del motor.
-- Con `-user`: el wire exige SCRAM-SHA-256. Tras autenticar, si el motor
-  tiene RBAC activo se crea una `Session` del motor con ese usuario
-  (permisos y `fieldDeny` se aplican igual que en Go).
+- Sin `-user`: no hay auth de wire. Los clientes que conectan sin credenciales
+  funcionan (salvo que el **motor** tenga RBAC activo, ≥1 usuario: entonces toda
+  operación devuelve `Unauthorized`). Un cliente que **intente** autenticarse recibe
+  `Authentication failed` —lo que Compass/Navicat/mongosh muestran como *invalid
+  credentials*— y el servidor lo registra indicando que falta `-user`/`-pass`.
+- Con `-user`: el wire exige SCRAM-SHA-256. Tras autenticar, si el motor tiene RBAC
+  activo se crea una `Session` del motor con ese usuario (permisos y `fieldDeny` se
+  aplican igual que en Go): `-user`/`-pass` deben ser un usuario **existente en la
+  base** (`_users`, consola web → Usuarios), no una credencial independiente.
+- Diagnósticos de arranque: se imprime qué store sirve el wire, qué bases de `-dbdir`
+  quedan solo para la consola web (y cómo servirlas: `-db <nombre>`), y si `-user`
+  no existe en la base (con la lista de usuarios válidos).
 
 ## Particularidades del subset
 

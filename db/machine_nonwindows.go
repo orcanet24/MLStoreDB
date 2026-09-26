@@ -2,8 +2,8 @@
 
 package db
 
-// machineGuid is unavailable off Windows; KEK falls back to "default"
-// unless Options.MachineID is set explicitly.
+// machineGuid no está disponible fuera de Windows; la KEK recurre a "default"
+// salvo que Options.MachineID se indique explícitamente.
 func machineGuid() string {
 	return ""
 }

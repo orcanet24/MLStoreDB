@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-// match filters: nil/empty = all docs.
-// Supported: $eq $ne $gt $gte $lt $lte $in $nin $regex $exists $and $or $not
-// plus implicit top-level equality.
+// match aplica filtros: nil/vacío = todos los documentos.
+// Soportados: $eq $ne $gt $gte $lt $lte $in $nin $regex $exists $and $or $not
+// más igualdad implícita en el primer nivel.
 func match(doc, filter Document) (bool, error) {
 	if len(filter) == 0 {
 		return true, nil
@@ -25,14 +25,14 @@ func match(doc, filter Document) (bool, error) {
 }
 
 func matchField(doc Document, field string, cond any) (bool, error) {
-	// Logical operators at top level or nested under a field.
+	// Operadores lógicos en el primer nivel o anidados bajo un campo.
 	if isLogicalOp(field) {
 		return matchLogical(doc, field, cond)
 	}
 
 	vals, exists := lookupMulti(doc, field)
 
-	// Nested query operators: {"field": {"$gt": 5}}
+	// Operadores de consulta anidados: {"field": {"$gt": 5}}
 	if obj, ok := cond.(Document); ok && hasOpKeys(obj) {
 		return matchOpsMulti(vals, exists, obj)
 	}
@@ -45,11 +45,11 @@ func matchField(doc Document, field string, cond any) (bool, error) {
 	}
 
 	if !exists {
-		// Implicit equality on missing field matches only nil/missing semantics:
-		// match if cond is nil (Mongo: missing matches null in $eq with null).
+		// La igualdad implícita sobre un campo ausente solo encaja con la semántica de nil/ausente:
+		// coincide si cond es nil (Mongo: ausente coincide con null en $eq con null).
 		return cond == nil, nil
 	}
-	// Array path: match if ANY element equals (DESIGN §6.1).
+	// Camino de array: coincide si CUALQUIER elemento es igual (DESIGN §6.1).
 	for _, v := range vals {
 		if equalJSON(v, cond) {
 			return true, nil
@@ -58,13 +58,13 @@ func matchField(doc Document, field string, cond any) (bool, error) {
 	return false, nil
 }
 
-// matchOpsMulti applies ops if ANY of vals satisfies all ops (array semantics).
-// Empty vals + exists=false handled inside matchOneOp via exists flag.
+// matchOpsMulti aplica los operadores si CUALQUIERA de los vals cumple todos los operadores (semántica de array).
+// El caso vals vacío + exists=false se trata dentro de matchOneOp mediante el flag exists.
 func matchOpsMulti(vals []any, exists bool, ops Document) (bool, error) {
 	if !exists || len(vals) == 0 {
 		return matchOps(nil, false, ops)
 	}
-	// Try each value; success if one value satisfies every op.
+	// Se prueba cada valor; hay éxito si un valor cumple todos los operadores.
 	for _, v := range vals {
 		ok, err := matchOps(v, true, ops)
 		if err != nil {
@@ -137,7 +137,7 @@ func matchLogical(doc Document, op string, cond any) (bool, error) {
 }
 
 func matchOps(val any, exists bool, ops Document) (bool, error) {
-	// $regex + $options handled together first (map iteration order is random).
+	// $regex + $options se tratan juntos primero (el orden de iteración del mapa es aleatorio).
 	if _, hasRegex := ops["$regex"]; hasRegex {
 		ok, err := applyRegex(val, exists, ops)
 		if err != nil {
@@ -214,12 +214,12 @@ func matchOneOp(op string, val any, exists bool, arg any) (bool, error) {
 		}
 		return exists == want, nil
 	case "$regex", "$options":
-		return true, nil // applied in matchOps before iteration
+		return true, nil // ya se aplicó en matchOps antes de iterar
 	case "$not":
-		// $not with operator expression
+		// $not con una expresión de operadores
 		ops, err := toDoc(arg)
 		if err != nil {
-			// $not with regex-like value not supported at this level
+			// $not con un valor tipo regex no está soportado en este nivel
 			return false, err
 		}
 		ok, err := matchOps(val, exists, ops)
@@ -232,13 +232,14 @@ func matchOneOp(op string, val any, exists bool, arg any) (bool, error) {
 	}
 }
 
-// $regex is special: may appear alongside $options.
-// When iterating map of ops, $options alone is skipped; $regex applies options
-// if present in the same ops map. To avoid map-order issues, matchOps handles
-// $regex by looking up sibling $options — we pass the full ops map via matchOpsRegex.
+// $regex es especial: puede aparecer junto a $options.
+// Al iterar el mapa de operadores, $options por sí solo se ignora; $regex aplica las
+// opciones si están presentes en el mismo mapa. Para evitar problemas de orden del
+// mapa, matchOps trata $regex buscando el $options hermano — se le pasa el mapa
+// completo de operadores mediante matchOpsRegex.
 
 func compareOp(op string, val, arg any) (bool, error) {
-	// Allow string/string and number/number comparisons; cross-type → false (not error).
+	// Se permiten comparaciones string/string y número/número; entre tipos distintos → false (no es error).
 	if !comparableTypes(val, arg) {
 		return false, nil
 	}
@@ -267,7 +268,7 @@ func comparableTypes(a, b any) bool {
 	if aStr && bStr {
 		return true
 	}
-	// bool / nil comparisons
+	// comparaciones bool / nil
 	return false
 }
 
@@ -279,8 +280,8 @@ func isLogicalOp(field string) bool {
 	return logicalOps[field]
 }
 
-// hasOpKeys reports if d looks like an operator expression ($-prefixed keys).
-// Unknown $-ops still route to matchOps so they return ErrBadFilter.
+// hasOpKeys indica si d parece una expresión de operadores (claves que empiezan por $).
+// Los $-ops desconocidos siguen yendo a matchOps para que devuelvan ErrBadFilter.
 func hasOpKeys(d Document) bool {
 	for k := range d {
 		if strings.HasPrefix(k, "$") {
@@ -290,7 +291,7 @@ func hasOpKeys(d Document) bool {
 	return false
 }
 
-// lookup walks dotted path "a.b.c" and returns the first match (legacy helper).
+// lookup recorre la ruta con puntos "a.b.c" y devuelve la primera coincidencia (ayudante heredado).
 func lookup(doc Document, path string) (any, bool) {
 	vals, ok := lookupMulti(doc, path)
 	if !ok || len(vals) == 0 {
@@ -299,8 +300,8 @@ func lookup(doc Document, path string) (any, bool) {
 	return vals[0], true
 }
 
-// lookupMulti walks dotted path; arrays expand — returns ALL leaf values
-// reachable via the path (Mongo: "items.item_id" can hit many elements).
+// lookupMulti recorre la ruta con puntos; los arrays se expanden y devuelve TODOS los
+// valores hoja alcanzables por la ruta (Mongo: "items.item_id" puede tocar varios elementos).
 func lookupMulti(doc Document, path string) ([]any, bool) {
 	if path == "" {
 		return nil, false

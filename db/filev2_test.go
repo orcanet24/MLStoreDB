@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// M1: formatVersion 2 record log — no plaintext JSON body, COMMIT commit point.
+// M1: log de registros formatVersion 2 — sin cuerpo JSON en texto plano y el COMMIT como punto de confirmación.
 
 func TestV2FormatRecordLog(t *testing.T) {
 	dir := t.TempDir()
@@ -35,14 +35,14 @@ func TestV2FormatRecordLog(t *testing.T) {
 	if raw[4] != 2 || raw[5] != 0 {
 		t.Fatalf("formatVersion = %d, want 2", int(raw[4])|int(raw[5])<<8)
 	}
-	// body must not contain plaintext JSON / document content
+	// el cuerpo no debe contener JSON en texto plano ni contenido de documentos
 	if bytes.Contains(raw[headerSize:], []byte(`"hunter2"`)) {
 		t.Error("plaintext doc value in record log")
 	}
 	if bytes.Contains(raw[headerSize:], []byte(`"status"`)) {
 		t.Error("plaintext field name in record log (payload should be ciphertext)")
 	}
-	// must end with a COMMIT record (scan types)
+	// debe terminar con un registro COMMIT (tipos de escaneo)
 	off := headerSize
 	var sawCommit, sawDoc bool
 	for off+recHdrSize <= len(raw) {
@@ -70,17 +70,17 @@ func TestV2ColdEvictionAndCacheStats(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "db.mlstore")
 	opts := testOpts()
-	opts.CacheBytes = 8 << 10 // tiny budget → force eviction pressure
+	opts.CacheBytes = 8 << 10 // presupuesto diminuto → fuerza presión de expulsión
 	s, err := Open(path, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Incompressible payload so on-disk record size tracks the budget pressure.
+	// Carga útil incompresible para que el tamaño del registro en disco refleje la presión del presupuesto.
 	payload := make([]byte, 2048)
 	for i := range payload {
 		payload[i] = byte(i*17 + 31)
 	}
-	blob := json.Number(string(payload)) // keep as raw string in doc
+	blob := json.Number(string(payload)) // se guarda como string crudo en el documento
 	for i := 0; i < 64; i++ {
 		if err := s.Insert("q", Document{"_id": idKey(i), "blob": blob.String()}); err != nil {
 			t.Fatal(err)
@@ -95,7 +95,7 @@ func TestV2ColdEvictionAndCacheStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s2.Close()
-	// After open, docs are cold (rec offsets only).
+	// Tras abrir, los documentos están fríos (solo offsets de registro).
 	st := s2.CacheStats()
 	if st.TotalEntries != 64 {
 		t.Fatalf("entries = %d", st.TotalEntries)
@@ -103,7 +103,7 @@ func TestV2ColdEvictionAndCacheStats(t *testing.T) {
 	if st.Cold != 64 {
 		t.Fatalf("expected all cold after open, got cold=%d resident=%d", st.Cold, st.Resident)
 	}
-	// Access one doc → becomes resident.
+	// Acceder a un documento → pasa a residente.
 	if _, err := s2.Get("q", idKey(0)); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestV2ColdEvictionAndCacheStats(t *testing.T) {
 	if st.Resident < 1 {
 		t.Fatalf("resident after Get: %+v", st)
 	}
-	// Walk many docs to pressure the 64KiB budget → evictions expected.
+	// Recorrer muchos documentos para presionar el presupuesto de 64KiB → se esperan expulsiones.
 	for i := 0; i < 64; i++ {
 		if _, err := s2.Get("q", idKey(i)); err != nil {
 			t.Fatal(err)
@@ -124,7 +124,7 @@ func TestV2ColdEvictionAndCacheStats(t *testing.T) {
 	if st.Bytes > st.Budget && st.Budget > 0 {
 		t.Fatalf("bytes %d > budget %d with no further eviction", st.Bytes, st.Budget)
 	}
-	// Find still returns all docs (loads cold as needed).
+	// Find sigue devolviendo todos los documentos (carga los fríos según haga falta).
 	docs, err := s2.Find("q", nil, nil)
 	if err != nil || len(docs) != 64 {
 		t.Fatalf("find after eviction: %d %v", len(docs), err)
@@ -144,7 +144,7 @@ func TestV2TornTailSelfHeal(t *testing.T) {
 	if err := s.FlushSync(); err != nil {
 		t.Fatal(err)
 	}
-	// Second flush appends another doc (sawFile → append mode).
+	// El segundo flush añade otro documento (sawFile → modo append).
 	if err := s.Insert("q", Document{"_id": "2", "v": "b"}); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestV2TornTailSelfHeal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate a torn append: append a partial record header (no full record).
+	// Simular un append cortado: añadir una cabecera de registro parcial (sin el registro completo).
 	torn := append(append([]byte(nil), raw...), make([]byte, 10)...) // 10 < recHdrSize
 	if err := os.WriteFile(path, torn, 0o600); err != nil {
 		t.Fatal(err)
@@ -172,10 +172,10 @@ func TestV2TornTailSelfHeal(t *testing.T) {
 	if err != nil || len(docs) != 2 {
 		t.Fatalf("docs after tail heal: %d %v", len(docs), err)
 	}
-	// File should have been truncated back to last COMMIT.
+	// El archivo debería haberse truncado hasta el último COMMIT.
 	after, _ := os.ReadFile(path)
 	if int64(len(after)) != int64(len(raw)) {
-		// may equal raw if truncate landed on commit end == raw end
+		// puede ser igual a raw si el truncado cayó justo en el final del commit
 		if len(after) > len(raw) {
 			t.Fatalf("tail not truncated: %d > %d", len(after), len(raw))
 		}
@@ -194,7 +194,7 @@ func TestV2CompactRewritesLog(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Rewrite same ids many times → dead bytes in the log.
+	// Reescribir los mismos ids muchas veces → bytes muertos en el log.
 	for round := 0; round < 5; round++ {
 		for i := 0; i < 20; i++ {
 			if err := s.Update("q", idKey(i), Document{"round": round}); err != nil {
@@ -213,7 +213,7 @@ func TestV2CompactRewritesLog(t *testing.T) {
 	if after.Size() >= before.Size() {
 		t.Errorf("compact did not shrink: %d → %d", before.Size(), after.Size())
 	}
-	// Data intact + log still valid.
+	// Datos intactos + log todavía válido.
 	docs, err := s.Find("q", nil, nil)
 	if err != nil || len(docs) != 20 {
 		t.Fatalf("after compact: %d %v", len(docs), err)
@@ -230,7 +230,7 @@ func TestV2CompactRewritesLog(t *testing.T) {
 	if len(docs) != 20 {
 		t.Fatalf("reopen after compact: %d", len(docs))
 	}
-	// Verify offsets are valid (Get works for cold docs).
+	// Comprobar que los offsets son válidos (Get funciona con documentos fríos).
 	if _, err := s2.Get("q", idKey(7)); err != nil {
 		t.Fatalf("cold get after compact: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestV2CompactRewritesLog(t *testing.T) {
 func TestV1MigrationToV2(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "db.mlstore")
-	// Build a minimal v1 file by hand using current crypto helpers.
+	// Construir a mano un archivo v1 mínimo con los ayudantes criptográficos actuales.
 	opts := testOpts()
 	dek, err := randomBytes(32)
 	if err != nil {
@@ -303,7 +303,7 @@ func TestV1MigrationToV2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Open v1 → in-memory load, pending v2 rewrite.
+	// Open v1 → carga en memoria y reescritura v2 pendiente.
 	s, err := Open(path, opts)
 	if err != nil {
 		t.Fatalf("open v1: %v", err)
@@ -319,7 +319,7 @@ func TestV1MigrationToV2(t *testing.T) {
 	if len(list) != 1 || list[0].Fields[0] != "status" {
 		t.Fatalf("v1 index defs: %v", list)
 	}
-	// First flush migrates to v2.
+	// El primer flush migra a v2.
 	if err := s.FlushSync(); err != nil {
 		t.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func TestV1MigrationToV2(t *testing.T) {
 	if raw[4] != 2 {
 		t.Fatalf("after migration formatVersion = %d, want 2", raw[4])
 	}
-	// Reopen as v2.
+	// Reabrir como v2.
 	s2, err := Open(path, opts)
 	if err != nil {
 		t.Fatalf("open migrated: %v", err)
@@ -344,7 +344,7 @@ func TestV1MigrationToV2(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("migrated indexes: %v", list)
 	}
-	// Index still enforced.
+	// El índice se sigue aplicando.
 	_ = s2.Insert("q", Document{"_id": "3", "status": "OPEN"})
 	if err := s2.EnsureIndex("q", []string{"status"}, false); err != nil {
 		t.Fatal(err)

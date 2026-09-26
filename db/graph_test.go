@@ -40,11 +40,11 @@ func TestAddEdgeAndNeighbors(t *testing.T) {
 		t.Errorf("in(c) = %v", got)
 	}
 	got, _ = s.Neighbors("knows", "b", Both)
-	// out: c ; in: a
+	// salientes: c ; entrantes: a
 	if len(got) != 2 || got[0] != "a" || got[1] != "c" {
 		t.Errorf("both(b) = %v", got)
 	}
-	// unknown vertex / type
+	// vértice / tipo desconocido
 	got, err = s.Neighbors("knows", "zzz", Outgoing)
 	if err != nil || len(got) != 0 {
 		t.Errorf("unknown vertex = %v, %v", got, err)
@@ -85,9 +85,9 @@ func TestAddEdgeValidation(t *testing.T) {
 func TestGraphCacheInvalidation(t *testing.T) {
 	s := seedGraph(t)
 	if _, err := s.Neighbors("knows", "a", Outgoing); err != nil {
-		t.Fatal(err) // build cache
+		t.Fatal(err) // construir la caché
 	}
-	// AddEdge visible
+	// AddEdge es visible
 	if _, err := s.AddEdge("knows", "a", "z", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestGraphCacheInvalidation(t *testing.T) {
 	if !found {
 		t.Errorf("cache stale after AddEdge: %v", got)
 	}
-	// generic Delete on edges.* also invalidates
+	// Delete genérico sobre edges.* también invalida
 	ids := FindIDs(t, s, edgeCollName("knows"), Document{"_from": "a", "_to": "z"})
 	if len(ids) != 1 {
 		t.Fatalf("ids = %v", ids)
@@ -124,7 +124,7 @@ func TestGraphCacheInvalidation(t *testing.T) {
 	if len(got) != 0 {
 		t.Errorf("RemoveEdge leftover: %v", got)
 	}
-	// generic Insert invalidates too
+	// Insert genérico también invalida
 	if err := s.Insert(edgeCollName("knows"), Document{"_id": "e1", "_from": "m", "_to": "n"}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestGraphCacheInvalidation(t *testing.T) {
 	}
 }
 
-// FindIDs is a tiny test helper for id lookup.
+// FindIDs es un pequeño ayudante de test para buscar ids.
 func FindIDs(t *testing.T, s *Store, coll string, filter Document) []string {
 	t.Helper()
 	docs, err := s.Find(coll, filter, nil)
@@ -150,7 +150,7 @@ func FindIDs(t *testing.T, s *Store, coll string, filter Document) []string {
 
 func TestTraverseDepthAndLimit(t *testing.T) {
 	s := seedGraph(t)
-	// full BFS from a: a(0), b(1), c(1), d(2)
+	// BFS completo desde a: a(0), b(1), c(1), d(2)
 	res, err := s.Traverse(TraverseOptions{EdgeType: "knows", Start: "a"})
 	if err != nil {
 		t.Fatal(err)
@@ -169,13 +169,13 @@ func TestTraverseDepthAndLimit(t *testing.T) {
 		t.Errorf("depths = %v", depths)
 	}
 
-	// MaxDepth=1 → a,b,c only
+	// MaxDepth=1 → solo a,b,c
 	res, _ = s.Traverse(TraverseOptions{EdgeType: "knows", Start: "a", MaxDepth: 1})
 	if len(res) != 3 {
 		t.Errorf("maxdepth1 = %v", res)
 	}
 
-	// MinDepth=1 excludes start
+	// MinDepth=1 excluye el inicio
 	res, _ = s.Traverse(TraverseOptions{EdgeType: "knows", Start: "a", MinDepth: 1})
 	if len(res) != 3 || res[0].Vertex == "a" {
 		t.Errorf("mindepth1 = %v", res)
@@ -187,24 +187,24 @@ func TestTraverseDepthAndLimit(t *testing.T) {
 		t.Errorf("limit2 = %v", res)
 	}
 
-	// Incoming from d → only via incoming edges (none into d? c→d means in(d)=c)
+	// Incoming desde d → solo por aristas entrantes (¿ninguna hacia d? c→d significa in(d)=c)
 	res, _ = s.Traverse(TraverseOptions{EdgeType: "knows", Start: "d", Direction: Incoming})
 	verts := map[string]bool{}
 	for _, n := range res {
 		verts[n.Vertex] = true
 	}
-	// d, c, b, a via incoming reversed walk: d←c←b←a and c←a
+	// d, c, b, a por recorrido inverso de entrantes: d←c←b←a y c←a
 	if !verts["c"] || !verts["a"] {
 		t.Errorf("incoming traverse = %v", res)
 	}
 
-	// clamps: absurd values don't hang
+	// acotado: los valores absurdos no cuelgan
 	res, err = s.Traverse(TraverseOptions{EdgeType: "knows", Start: "a", MaxDepth: 9999, Limit: 999999999})
 	if err != nil || len(res) != 4 {
 		t.Errorf("clamp = %d, %v", len(res), err)
 	}
 
-	// missing start required
+	// se exige un start presente
 	if _, err := s.Traverse(TraverseOptions{EdgeType: "knows"}); err == nil {
 		t.Error("missing start must fail")
 	}
@@ -216,7 +216,7 @@ func TestShortestPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// a→c→d (length 2 edges, 3 verts) is shortest (a→b→c→d is 3 edges)
+	// a→c→d (2 aristas, 3 vértices) es el más corto (a→b→c→d son 3 aristas)
 	want := []string{"a", "c", "d"}
 	if len(path) != len(want) {
 		t.Fatalf("path = %v", path)
@@ -226,27 +226,27 @@ func TestShortestPath(t *testing.T) {
 			t.Fatalf("path = %v, want %v", path, want)
 		}
 	}
-	// same vertex
+	// mismo vértice
 	path, _ = s.ShortestPath("knows", "a", "a", 0)
 	if len(path) != 1 || path[0] != "a" {
 		t.Errorf("same = %v", path)
 	}
-	// unreachable (x has no out to a)
+	// inalcanzable (x no tiene aristas salientes hacia a)
 	path, err = s.ShortestPath("knows", "x", "a", 0)
 	if err != nil || path != nil {
 		t.Errorf("unreachable = %v, %v", path, err)
 	}
-	// maxDepth=1 too shallow for a→d
+	// maxDepth=1 es demasiado poco para a→d
 	path, _ = s.ShortestPath("knows", "a", "d", 1)
 	if path != nil {
 		t.Errorf("shallow = %v", path)
 	}
-	// maxDepth=2 works
+	// maxDepth=2 funciona
 	path, _ = s.ShortestPath("knows", "a", "d", 2)
 	if len(path) != 3 {
 		t.Errorf("depth2 = %v", path)
 	}
-	// reverse path from d to a: no outgoing from d → nil
+	// camino inverso de d a a: sin aristas salientes desde d → nil
 	path, _ = s.ShortestPath("knows", "d", "a", 0)
 	if path != nil {
 		t.Errorf("reverse = %v", path)
@@ -256,7 +256,7 @@ func TestShortestPath(t *testing.T) {
 func TestGraphDedupMultiEdge(t *testing.T) {
 	s := New()
 	_, _ = s.AddEdge("e", "a", "b", nil)
-	_, _ = s.AddEdge("e", "a", "b", nil) // parallel edge
+	_, _ = s.AddEdge("e", "a", "b", nil) // arista paralela
 	got, _ := s.Neighbors("e", "a", Outgoing)
 	if len(got) != 1 || got[0] != "b" {
 		t.Errorf("dedup = %v", got)
@@ -266,7 +266,7 @@ func TestGraphDedupMultiEdge(t *testing.T) {
 func TestGraphRBAC(t *testing.T) {
 	s := New()
 	s.opts.LightKDF = true
-	// seed edges while open
+	// sembrar aristas con el almacén abierto
 	if _, err := s.AddEdge("knows", "a", "b", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -282,14 +282,14 @@ func TestGraphRBAC(t *testing.T) {
 	if err := s.CreateUser("bob", "secret-reader-1", []string{"none"}); err != nil {
 		t.Fatal(err)
 	}
-	// raw API denied once auth active
+	// la API cruda se deniega cuando la autenticación está activa
 	if _, err := s.Neighbors("knows", "a", Outgoing); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("raw Neighbors = %v", err)
 	}
 	if _, err := s.Traverse(TraverseOptions{EdgeType: "knows", Start: "a"}); !errors.Is(err, ErrUnauthorized) {
 		t.Errorf("raw Traverse = %v", err)
 	}
-	// admin session OK
+	// la sesión de admin funciona
 	admin, err := s.Authenticate("root", "secret-admin-1")
 	if err != nil {
 		t.Fatal(err)
@@ -298,12 +298,12 @@ func TestGraphRBAC(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0] != "b" {
 		t.Errorf("admin Neighbors = %v, %v", got, err)
 	}
-	// session without edge coll perm → Forbidden
+	// sesión sin permiso sobre la colección de aristas → Forbidden
 	bob, _ := s.Authenticate("bob", "secret-reader-1")
 	if _, err := bob.Neighbors("knows", "a", Outgoing); !errors.Is(err, ErrForbidden) {
 		t.Errorf("bob Neighbors = %v", err)
 	}
-	// session AddEdge with write via admin
+	// AddEdge con sesión y escritura a través de admin
 	if _, err := admin.AddEdge("knows", "b", "c", nil); err != nil {
 		t.Errorf("admin AddEdge = %v", err)
 	}
@@ -321,8 +321,8 @@ func TestGraphTypesAreDistinct(t *testing.T) {
 	if len(got) != 1 || got[0] != "z" {
 		t.Errorf("likes = %v", got)
 	}
-	// edge colls hidden from Collections? They are user-visible (not system) —
-	// they SHOULD appear (they are normal colls).
+	// ¿Están ocultas las colecciones de aristas en Collections? Son visibles para el
+	// usuario (no son del sistema) — DEBERÍAN aparecer (son colecciones normales).
 	names := s.Collections()
 	hasKnows := false
 	for _, n := range names {

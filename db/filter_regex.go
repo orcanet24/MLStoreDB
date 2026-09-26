@@ -6,9 +6,9 @@ import (
 	"sync"
 )
 
-// regexCache compiles each distinct pattern once (point 6).
-// Key: pattern after $options applied (e.g. "(?i)^a").
-var regexCache sync.Map // string → *regexp.Regexp | error sentinel
+// regexCache compila cada patrón distinto una sola vez (punto 6).
+// Clave: el patrón una vez aplicadas las $options (por ejemplo "(?i)^a").
+var regexCache sync.Map // string → *regexp.Regexp | centinela de error
 
 var errRegexCache = errBadRegex{}
 
@@ -32,15 +32,15 @@ func compileCached(pattern string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-// applyRegex handles $regex + $options together (options may appear as sibling).
-// Call from matchOps when $regex is present; $options alone is a no-op.
+// applyRegex trata $regex + $options juntos (las opciones pueden aparecer como hermanas).
+// Se llama desde matchOps cuando $regex está presente; $options por si solo no hace nada.
 func applyRegex(val any, exists bool, ops Document) (bool, error) {
 	if !exists {
 		return false, nil
 	}
 	s, ok := val.(string)
 	if !ok {
-		// non-string never matches $regex (Mongo-like)
+		// un valor que no es string nunca coincide con $regex (estilo Mongo)
 		return false, nil
 	}
 	pattern, _ := ops["$regex"].(string)

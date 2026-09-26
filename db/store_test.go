@@ -22,7 +22,7 @@ func TestInsertAndGet(t *testing.T) {
 
 func TestInsertRequiresID(t *testing.T) {
 	s := New()
-	// missing _id → auto ULID (DESIGN §3.1)
+	// falta el _id → ULID automático (DESIGN §3.1)
 	if err := s.Insert("users", Document{"email": "x"}); err != nil {
 		t.Errorf("auto ULID: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestFindAllAndEquality(t *testing.T) {
 	if err != nil || len(all) != 3 {
 		t.Fatalf("all=%d err=%v", len(all), err)
 	}
-	// ordered by _id
+	// ordenados por _id
 	if all[0]["_id"] != "1" || all[2]["_id"] != "3" {
 		t.Error("not sorted by _id")
 	}
@@ -192,7 +192,7 @@ func TestCallerCannotMutateStoredDoc(t *testing.T) {
 
 func TestSchemaVersion(t *testing.T) {
 	s := New()
-	// Fresh store = 0 (unmigrated); migrations bump to N.
+	// Almacén nuevo = 0 (sin migrar); las migraciones suben a N.
 	if s.SchemaVersion() != 0 {
 		t.Errorf("version = %d", s.SchemaVersion())
 	}

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// M2: CSR index_matrix embedded in the IDX record with checksum fallback.
+// M2: matrix CSR de índice embebida en el registro IDX con respaldo por checksum.
 
 func TestIndexMatrixSerializedAndLoaded(t *testing.T) {
 	dir := t.TempDir()
@@ -33,7 +33,7 @@ func TestIndexMatrixSerializedAndLoaded(t *testing.T) {
 	if err := s.FlushSync(); err != nil {
 		t.Fatal(err)
 	}
-	// In-RAM matrix live after serialize.
+	// La matrix en RAM queda viva tras serialize.
 	list, _ := s.ListIndexes("q")
 	if len(list) != 1 {
 		t.Fatalf("indexes: %v", list)
@@ -47,7 +47,7 @@ func TestIndexMatrixSerializedAndLoaded(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s2.Close()
-	// Loaded via CSR path: matrix must be live for flat seeks.
+	// Cargado por el camino CSR: la matrix debe quedar viva para las búsquedas planas.
 	c := s2.collections["q"]
 	if c == nil {
 		t.Fatal("no collection")
@@ -66,7 +66,7 @@ func TestIndexMatrixSerializedAndLoaded(t *testing.T) {
 	if len(m.Indptr) != nOrd+1 {
 		t.Fatalf("indptr=%d ord=%d", len(m.Indptr), nOrd)
 	}
-	// Range seek returns same results via matrix path.
+	// La búsqueda por rango devuelve los mismos resultados por el camino de la matrix.
 	docs, err := s2.Find("q", Document{"status": "OPEN"}, nil)
 	if err != nil || len(docs) == 0 {
 		t.Fatalf("equality find: %d %v", len(docs), err)
@@ -75,13 +75,13 @@ func TestIndexMatrixSerializedAndLoaded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Explain should still report IXSCAN for equality.
+	// Explain debe seguir informando IXSCAN para igualdad.
 	ex := s2.Explain("q", Document{"status": "CLOSED"})
 	if ex.Plan != "IXSCAN" {
 		t.Fatalf("plan=%s want IXSCAN (%+v)", ex.Plan, ex)
 	}
 	_ = docs2
-	// Count via index still correct.
+	// Count a través del índice sigue siendo correcto.
 	n, err := s2.Count("q", Document{"status": "CLOSED"})
 	if err != nil {
 		t.Fatal(err)
@@ -91,10 +91,10 @@ func TestIndexMatrixSerializedAndLoaded(t *testing.T) {
 		if i%3 == 0 && i%7 != 0 {
 			want++
 		} else if i%3 == 0 && i%7 == 0 {
-			// PENDING wins in insert order? no — status chosen by last condition
+			// ¿gana PENDING por orden de inserción? no — el estado lo elige la última condición
 		}
 	}
-	// Recompute expected with same rules as insert.
+	// Recalcular lo esperado con las mismas reglas que en la inserción.
 	want = 0
 	for i := 0; i < 50; i++ {
 		st := "OPEN"
@@ -136,10 +136,10 @@ func TestIndexMatrixChecksumFallbackToRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Corrupt the CSR checksum inside the IDX payload (still a valid record:
-	// we re-serialize the payload JSON after flipping csum, then rewrite via
-	// a loadRows unit path — simpler: exercise loadRows directly).
-	// Build the payload as prepareFlush would emit it, corrupt CSR, keep Rows.
+	// Corromper el checksum del CSR dentro de la carga IDX (sigue siendo un registro válido:
+	// se reserializa el JSON de la carga tras invertir el csum y luego se reescribe por un
+	// camino unitario de loadRows — más simple: ejercitar loadRows directamente).
+	// Construir la carga como la emitiría prepareFlush, corromper el CSR y conservar las Rows.
 	idx := newIndex([]string{"n"}, false)
 	for i := 0; i < 20; i++ {
 		if err := idx.addDoc(Document{"_id": idKey(i), "n": i}, idKey(i)); err != nil {
@@ -153,7 +153,7 @@ func TestIndexMatrixChecksumFallbackToRows(t *testing.T) {
 	if len(p.Rows) != 20 {
 		t.Fatalf("rows=%d", len(p.Rows))
 	}
-	// Corrupt checksum → valid() fails → loadRows falls back to Rows.
+	// Checksum corrupto → valid() falla → loadRows recurre a Rows.
 	p.CSR.Checksum ^= 0xdeadbeef
 	idx2 := newIndex([]string{"n"}, false)
 	if err := idx2.loadRows(p); err != nil {
@@ -165,7 +165,7 @@ func TestIndexMatrixChecksumFallbackToRows(t *testing.T) {
 	if len(idx2.ord) != 20 {
 		t.Fatalf("ord=%d", len(idx2.ord))
 	}
-	// Seek still works without matrix.
+	// La búsqueda sigue funcionando sin la matrix.
 	got := idx2.lookupIDs([]any{float64(7)})
 	if len(got) != 1 {
 		t.Fatalf("lookup after fallback: %v", got)
@@ -174,13 +174,13 @@ func TestIndexMatrixChecksumFallbackToRows(t *testing.T) {
 		t.Fatalf("lookup after fallback: %v", got)
 	}
 
-	// Totally invalid CSR (shape) + no Rows → error → eager path.
+	// CSR totalmente inválido (forma) y sin Rows → error → camino "eager".
 	bad := idx.serialize()
 	bad.Rows = nil
-	bad.CSR.Indptr = []int32{0, 99} // shape mismatch vs Keys
-	// recompute? no — leave checksum wrong too so valid() is false AND rows empty
-	// valid() false → falls to Rows (empty) → returns nil with empty ord.
-	// Force the eager signal: empty Rows AND nil/bad CSR.
+	bad.CSR.Indptr = []int32{0, 99} // la forma no coincide con Keys
+	// ¿recalcular? no — se deja también el checksum mal para que valid() sea false
+	// Y las rows estén vacías. valid() false → recurre a Rows (vacías) → devuelve nil
+	// con ord vacío. Se fuerza la señal "eager": Rows vacías Y CSR nil o incorrecto.
 	bad.CSR = nil
 	idx3 := newIndex([]string{"n"}, false)
 	if err := idx3.loadRows(bad); err == nil && len(idx3.ord) != 0 {
@@ -208,7 +208,7 @@ func TestIndexMatrixRoundtripJSON(t *testing.T) {
 	if !back.valid() {
 		t.Fatal("roundtrip checksum/shape invalid")
 	}
-	// Tamper one id → checksum fails.
+	// Manipular un id → el checksum falla.
 	back.Ids[0] = "tampered"
 	if back.valid() {
 		t.Fatal("tampered matrix still valid")
@@ -218,7 +218,7 @@ func TestIndexMatrixRoundtripJSON(t *testing.T) {
 func TestIndexMatrixInvalidatedOnMutation(t *testing.T) {
 	idx := newIndex([]string{"n"}, false)
 	_ = idx.addDoc(Document{"_id": "1", "n": 1}, "1")
-	_ = idx.serialize() // sets live matrix
+	_ = idx.serialize() // deja viva la matrix
 	idx.mu.Lock()
 	if idx.matrix == nil {
 		idx.mu.Unlock()
@@ -236,7 +236,7 @@ func TestIndexMatrixInvalidatedOnMutation(t *testing.T) {
 
 func TestIndexMatrixUniqueMultiIDRejected(t *testing.T) {
 	idx := newIndex([]string{"u"}, true)
-	// Hand-build a corrupt CSR payload: unique key with two ids.
+	// Construir a mano una carga CSR corrupta: clave única con dos ids.
 	p := idxPayload{
 		Fields: []string{"u"},
 		Unique: true,
